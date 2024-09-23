@@ -16,7 +16,7 @@ func main() {
 
 	defer conn.Close()
 
-	bb := make([]byte, 1024)
+	bb := make([]byte, 512)
 	for {
 		rlen, _, err := conn.ReadFromUDP(bb)
 		if err != nil {
