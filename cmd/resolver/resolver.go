@@ -27,5 +27,6 @@ func main() {
 		}
 	}
 
-	_ = dns.NewHeader(bb)
+	message := dns.NewMessage(bb)
+	fmt.Println(message.String())
 }

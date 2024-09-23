@@ -189,23 +189,58 @@ func (hdr header) String(withNewLines bool) string {
 	)
 }
 
-func NewHeader(b []byte) *header {
-	hdr := &header{}
-	hdr.id = binary.BigEndian.Uint16(b[0:2])
-	hdr.qinfo = binary.BigEndian.Uint16(b[2:4])
-	hdr.qdcount = binary.BigEndian.Uint16(b[4:6])
-	hdr.ancount = binary.BigEndian.Uint16(b[6:8])
-	hdr.nscount = binary.BigEndian.Uint16(b[8:10])
-	hdr.arcount = binary.BigEndian.Uint16(b[10:12])
-	fmt.Println(hdr.String(true))
-	return hdr
+func read16(b []byte) (uint16, []byte) {
+	return binary.BigEndian.Uint16(b[0:2]), b[2:]
 }
 
-type question struct{}
+func NewHeader(b []byte) (*header, []byte) {
+	hdr := &header{}
+	hdr.id, b = read16(b)
+	hdr.qinfo, b = read16(b)
+	hdr.qdcount, b = read16(b)
+	hdr.ancount, b = read16(b)
+	hdr.nscount, b = read16(b)
+	hdr.arcount, b = read16(b)
+	return hdr, b
+}
 
-type message struct {
+type question struct {
+	qname  []byte
+	qtype  uint16
+	qclass uint16
+}
+
+func NewQuestion(b []byte) (*question, []byte) {
+	q := &question{}
+	q.qname = b[0:11]
+	q.qtype, b = read16(b[12:])
+	q.qclass, b = read16(b)
+	return q, b
+}
+
+func (q question) String() string {
+	return fmt.Sprintf(
+		"question: %s\nqtype: %d\n, qclass: %d",
+		string(q.qname),
+		q.qtype,
+		q.qclass,
+	)
+}
+
+type Message struct {
 	hdr header
 	q   question
+}
+
+func (m Message) String() string {
+	return m.hdr.String(true) + "\n" + m.q.String()
+}
+
+func NewMessage(b []byte) *Message {
+	hdr, b := NewHeader(b)
+	q, b := NewQuestion(b)
+	m := &Message{hdr: *hdr, q: *q}
+	return m
 }
 
 type answer struct{}
