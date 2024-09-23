@@ -59,12 +59,19 @@ const (
 
 // header (12 bytes)
 type header struct {
-	id      uint16
-	qinfo   uint16
-	qdcount uint16
-	ancount uint16
-	nscount uint16
-	arcount uint16
+	id          uint16 // message id
+	qr          bool   // query or response respectively
+	opcode      uint8  // 0 std, 1 inverse, 2 server status, 3-15 reserved
+	aa          bool   // authoritative
+	tc          bool   // truncation
+	rd          bool   // recursion desired
+	ra          bool   // recursion available
+	z           bool   // future use
+	rcode       uint8  // response code, see rcodefailure
+	questions   uint16 // how many questions
+	answers     uint16 // how many answers
+	authorities uint16 // how many rr records in authority records
+	additionals uint16 // rr records in additional records
 }
 
 var (
@@ -81,38 +88,6 @@ const (
 	ZMask             = 0x0040 // 1 bit
 	RCodeMask         = 0x003F // 4 bits
 )
-
-func (hdr header) qr() uint16 {
-	return (hdr.qinfo & QrMask) >> 15
-}
-
-func (hdr header) aa() uint16 {
-	return (hdr.qinfo & AAMask) >> 10
-}
-
-func (hdr header) opcode() uint16 {
-	return (hdr.qinfo & OPCodeMask) >> 11
-}
-
-func (hdr header) tc() uint16 {
-	return (hdr.qinfo & TCMask) >> 9
-}
-
-func (hdr header) rd() uint16 {
-	return (hdr.qinfo & RDMask) >> 8
-}
-
-func (hdr header) ra() uint16 {
-	return (hdr.qinfo & RAMask) >> 7
-}
-
-func (hdr header) z() uint16 {
-	return (hdr.qinfo & ZMask) >> 6
-}
-
-func (hdr header) rcode() uint16 {
-	return (hdr.qinfo & RCodeMask)
-}
 
 type rcodefailure = int
 
@@ -152,40 +127,40 @@ func (hdr header) String(withNewLines bool) string {
 	nonewline :=
 		"id: %d, qr: %d, opcode: %d, aa: %d, tc: %d, rd: %d, ra: %d, z: %d, rcode: %d, qd: %d, an: %d, ns: %d, ar: %d"
 	newline :=
-		"id:%d\nqr:%d\nopcode:%d\naa:%d\ntc:%d\nrd:%d\nra:%d\nz:%d\nrcode:%d\nqd:%d\nan:%d\nns:%d\nar:%d"
+		"id: %d\nqr: %d\nopcode: %d\naa: %d\ntc: %d\nrd: %d\nra: %d\nz: %d\nrcode: %d\nqd: %d\nan: %d\nns: %d\nar: %d"
 	if withNewLines {
 		return fmt.Sprintf(
 			newline,
 			hdr.id,
-			hdr.qr(),
-			hdr.opcode(),
-			hdr.aa(),
-			hdr.tc(),
-			hdr.rd(),
-			hdr.ra(),
-			hdr.z(),
-			hdr.rcode(),
-			hdr.qdcount,
-			hdr.ancount,
-			hdr.nscount,
-			hdr.arcount,
+			hdr.qr,
+			hdr.opcode,
+			hdr.aa,
+			hdr.tc,
+			hdr.rd,
+			hdr.ra,
+			hdr.z,
+			hdr.rcode,
+			hdr.questions,
+			hdr.answers,
+			hdr.authorities,
+			hdr.additionals,
 		)
 	}
 	return fmt.Sprintf(
 		nonewline,
 		hdr.id,
-		hdr.qr(),
-		hdr.opcode(),
-		hdr.aa(),
-		hdr.tc(),
-		hdr.rd(),
-		hdr.ra(),
-		hdr.z(),
-		hdr.rcode(),
-		hdr.qdcount,
-		hdr.ancount,
-		hdr.nscount,
-		hdr.arcount,
+		hdr.qr,
+		hdr.opcode,
+		hdr.aa,
+		hdr.tc,
+		hdr.rd,
+		hdr.ra,
+		hdr.z,
+		hdr.rcode,
+		hdr.questions,
+		hdr.answers,
+		hdr.authorities,
+		hdr.additionals,
 	)
 }
 
@@ -193,14 +168,26 @@ func read16(b []byte) (uint16, []byte) {
 	return binary.BigEndian.Uint16(b[0:2]), b[2:]
 }
 
+func read32(b []byte) (uint32, []byte) {
+	return binary.BigEndian.Uint32(b[0:4]), b[4:]
+}
+
 func NewHeader(b []byte) (*header, []byte) {
 	hdr := &header{}
 	hdr.id, b = read16(b)
-	hdr.qinfo, b = read16(b)
-	hdr.qdcount, b = read16(b)
-	hdr.ancount, b = read16(b)
-	hdr.nscount, b = read16(b)
-	hdr.arcount, b = read16(b)
+	qinfo, b := read16(b)
+	hdr.qr = ((qinfo & QrMask) >> 15) > 0
+	hdr.aa = ((qinfo & AAMask) >> 10) > 0
+	hdr.tc = ((qinfo & TCMask) >> 9) > 0
+	hdr.rd = ((qinfo & RDMask) >> 8) > 0
+	hdr.ra = ((qinfo & RAMask) >> 7) > 0
+	hdr.z = ((qinfo & ZMask) >> 6) > 0
+	hdr.rcode = uint8((qinfo & RCodeMask))
+	hdr.opcode = uint8((qinfo & OPCodeMask) >> 11)
+	hdr.questions, b = read16(b)
+	hdr.answers, b = read16(b)
+	hdr.authorities, b = read16(b)
+	hdr.additionals, b = read16(b)
 	return hdr, b
 }
 
