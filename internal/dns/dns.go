@@ -197,9 +197,9 @@ type question struct {
 	qclass uint16
 }
 
-func NewQuestion(b []byte) (*question, []byte) {
+func newQuestion(b []byte) (*question, []byte) {
 	q := &question{}
-	q.qname = b[0:11]
+	q.qname = b[0:12]
 	q.qtype, b = read16(b[12:])
 	q.qclass, b = read16(b)
 	return q, b
@@ -207,7 +207,7 @@ func NewQuestion(b []byte) (*question, []byte) {
 
 func (q question) String() string {
 	return fmt.Sprintf(
-		"question: %s\nqtype: %d\n, qclass: %d",
+		"question: %s\nqtype: %d\nqclass: %d",
 		string(q.qname),
 		q.qtype,
 		q.qclass,
