@@ -59,19 +59,19 @@ const (
 
 // header (12 bytes)
 type header struct {
-	id          uint16 // message id
-	qr          uint8  // query or response respectively
-	opcode      uint8  // 0 std, 1 inverse, 2 server status, 3-15 reserved
-	aa          uint8  // authoritative
-	tc          uint8  // truncation
-	rd          uint8  // recursion desired
-	ra          uint8  // recursion available
-	z           uint8  // future use
-	rcode       uint8  // response code, see rcodefailure
-	questions   uint16 // how many questions
-	answers     uint16 // how many answers
-	authorities uint16 // how many rr records in authority records
-	additionals uint16 // rr records in additional records
+	id      uint16 // message id
+	qr      bool   // query or response respectively
+	opcode  uint8  // 0 std, 1 inverse, 2 server status, 3-15 reserved
+	aa      bool   // authoritative
+	tc      bool   // truncation
+	rd      bool   // recursion desired
+	ra      bool
+	z       bool
+	rcode   uint8
+	qdcount uint16
+	ancount uint16
+	nscount uint16
+	arcount uint16
 }
 
 var (
@@ -140,10 +140,10 @@ func (hdr header) String(withNewLines bool) string {
 			hdr.ra,
 			hdr.z,
 			hdr.rcode,
-			hdr.questions,
-			hdr.answers,
-			hdr.authorities,
-			hdr.additionals,
+			hdr.qdcount,
+			hdr.ancount,
+			hdr.nscount,
+			hdr.arcount,
 		)
 	}
 	return fmt.Sprintf(
@@ -157,10 +157,10 @@ func (hdr header) String(withNewLines bool) string {
 		hdr.ra,
 		hdr.z,
 		hdr.rcode,
-		hdr.questions,
-		hdr.answers,
-		hdr.authorities,
-		hdr.additionals,
+		hdr.qdcount,
+		hdr.ancount,
+		hdr.nscount,
+		hdr.arcount,
 	)
 }
 
@@ -176,32 +176,30 @@ func NewHeader(b []byte) (*header, []byte) {
 	hdr := &header{}
 	hdr.id, b = read16(b)
 	qinfo, b := read16(b)
-	hdr.qr = uint8((qinfo & QrMask) >> 15)
-	hdr.aa = uint8((qinfo & AAMask) >> 10)
-	hdr.tc = uint8((qinfo & TCMask) >> 9)
-	hdr.rd = uint8((qinfo & RDMask) >> 8)
-	hdr.ra = uint8((qinfo & RAMask) >> 7)
-	hdr.z = uint8((qinfo & ZMask) >> 6)
+	hdr.qr = ((qinfo & QrMask) >> 15) > 0
+	hdr.aa = ((qinfo & AAMask) >> 10) > 0
+	hdr.tc = ((qinfo & TCMask) >> 9) > 0
+	hdr.rd = ((qinfo & RDMask) >> 8) > 0
+	hdr.ra = ((qinfo & RAMask) >> 7) > 0
+	hdr.z = ((qinfo & ZMask) >> 6) > 0
 	hdr.rcode = uint8((qinfo & RCodeMask))
 	hdr.opcode = uint8((qinfo & OPCodeMask) >> 11)
-	hdr.questions, b = read16(b)
-	hdr.answers, b = read16(b)
-	hdr.authorities, b = read16(b)
-	hdr.additionals, b = read16(b)
+	hdr.qdcount, b = read16(b)
+	hdr.ancount, b = read16(b)
+	hdr.nscount, b = read16(b)
+	hdr.arcount, b = read16(b)
 	return hdr, b
 }
 
 type question struct {
-	qname  string
+	qname  []byte
 	qtype  uint16
 	qclass uint16
 }
 
 func newQuestion(b []byte) (*question, []byte) {
 	q := &question{}
-	q.qname, b = read_qname(b)
-	fmt.Println("len:", b[0])
-	fmt.Println("name:", q.qname)
+	q.qname = b[0:12]
 	q.qtype, b = read16(b[12:])
 	q.qclass, b = read16(b)
 	return q, b
@@ -224,53 +222,6 @@ type Message struct {
 
 func (m Message) String() string {
 	return m.hdr.String(true) + "\n" + m.q.String() + "\n" + m.rr.String()
-}
-
-var (
-	ErrorInvalidQNameLength = errors.New("qname: buffer is empty")
-)
-
-// right now I do not support more than 1 RFC 1035 label
-func read_qname(buff []byte) (string, []byte) {
-	// this is the initial length
-
-	labelLen := uint8(buff[0])
-	buff = buff[1:]
-
-	// 06 67 6f 6f 67 6c 65 03  63 6f 6d 00  |.google.com.|
-	// in this case the first byte is "6" which is "google"
-	// then after we've read 6, we get the byte "3" which is "com" and then NULL
-	// which means that we are done reading.
-	if labelLen > 63 {
-		panic(ErrorInvalidQNameLength)
-	}
-
-	if len(buff) < 1 {
-		panic(ErrorInvalidQNameLength)
-	}
-
-	str := ""
-	pos := 0
-	for {
-		if buff[pos] == 0 {
-			break
-		}
-
-		if int(labelLen) == 0 {
-			str += string('.')
-			labelLen = uint8(buff[pos])
-			pos += 1
-		}
-
-		str += string(buff[pos])
-		labelLen -= 1
-		pos += 1
-	}
-
-	if len(str) < 1 {
-		panic(ErrorInvalidQNameLength)
-	}
-	return str, buff[pos:]
 }
 
 func NewMessage(b []byte) *Message {

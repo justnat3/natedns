@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/justnat3/natedns/internal/dns"
 	"net"
 )
@@ -27,6 +28,7 @@ func main() {
 		}
 	}
 
+	spew.Dump(bb)
 	message := dns.NewMessage(bb)
 	fmt.Println(message.String())
 }
