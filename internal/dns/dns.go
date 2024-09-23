@@ -217,19 +217,51 @@ func (q question) String() string {
 type Message struct {
 	hdr header
 	q   question
+	rr  resourceRecord
 }
 
 func (m Message) String() string {
-	return m.hdr.String(true) + "\n" + m.q.String()
+	return m.hdr.String(true) + "\n" + m.q.String() + "\n" + m.rr.String()
 }
 
 func NewMessage(b []byte) *Message {
 	hdr, b := NewHeader(b)
-	q, b := NewQuestion(b)
-	m := &Message{hdr: *hdr, q: *q}
+	q, b := newQuestion(b)
+	rr, b := newResourceRecord(b)
+	fmt.Println("resulting length:", len(b))
+	m := &Message{hdr: *hdr, q: *q, rr: *rr}
 	return m
 }
 
-type answer struct{}
-type authority struct{}
-type additional struct{}
+// answer, authority, additional are all types of "resource records"
+type resourceRecord struct {
+	name   []byte
+	rtype  uint16
+	class  uint16
+	ttl    uint32
+	length uint16
+	rdata  uint32
+}
+
+func (rr resourceRecord) String() string {
+	return fmt.Sprintf(
+		"name: %s\ntype: %d\n class: %d\n ttl: %d\n length: %d\n rdata: %d",
+		string(rr.name),
+		rr.rtype,
+		rr.class,
+		rr.ttl,
+		rr.length,
+		rr.rdata,
+	)
+}
+
+func newResourceRecord(b []byte) (*resourceRecord, []byte) {
+	rr := &resourceRecord{}
+	rr.name = b[0:11]
+	rr.rtype, b = read16(b)
+	rr.class, b = read16(b)
+	rr.ttl, b = read32(b)
+	rr.length, b = read16(b)
+	rr.rdata, b = read32(b)
+	return rr, b
+}
