@@ -4,6 +4,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strings"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type qtype = int
@@ -16,15 +19,6 @@ const (
 	Mailb                    // A request for mailbox-related records (MB, MG or MR)
 	Maila                    // A request for mail agent RRs (Obsolete - see MX)
 	Star                     // A request for all records
-)
-
-// a bit field that tells us if its a query or response
-type qr = int
-
-const (
-	Query qr = iota + 1
-	Response
-	qrNone
 )
 
 const (
@@ -173,6 +167,7 @@ func read32(b []byte) (uint32, []byte) {
 }
 
 func NewHeader(b []byte) (*header, []byte) {
+	spew.Dump(b)
 	hdr := &header{}
 	hdr.id, b = read16(b)
 	qinfo, b := read16(b)
@@ -191,6 +186,25 @@ func NewHeader(b []byte) (*header, []byte) {
 	return hdr, b
 }
 
+func (hdr header) Write() []byte {
+	buff := []byte{
+		uint8(hdr.id >> 8),
+		uint8(hdr.id & 0xff),
+		(hdr.rd | hdr.tc<<1 | hdr.aa<<2 | hdr.opcode<<3 | hdr.ra<<7),
+		(hdr.rcode),
+		uint8(hdr.questions >> 8),
+		uint8(hdr.questions & 0xff),
+		uint8(hdr.answers >> 8),
+		uint8(hdr.answers & 0xff),
+		uint8(hdr.authorities >> 8),
+		uint8(hdr.authorities & 0xff),
+		uint8(hdr.additionals >> 8),
+		uint8(hdr.additionals & 0xff),
+	}
+
+	return buff
+}
+
 type question struct {
 	qname  string
 	qtype  uint16
@@ -199,12 +213,27 @@ type question struct {
 
 func newQuestion(b []byte) (*question, []byte) {
 	q := &question{}
-	q.qname, b = read_qname(b)
+	q.qname, b = readQName(b)
 	fmt.Println("len:", b[0])
 	fmt.Println("name:", q.qname)
 	q.qtype, b = read16(b[12:])
 	q.qclass, b = read16(b)
 	return q, b
+}
+
+func (q question) Write() []byte {
+	buff := []byte{}
+	qname := writeQName(q.qname)
+	buff = append(buff, qname...)
+	s := []byte{
+		uint8(q.qtype >> 8),
+		uint8(q.qtype & 0xff),
+		uint8(q.qclass >> 8),
+		uint8(q.qclass & 0xff),
+	}
+	buff = append(buff, s...)
+
+	return nil
 }
 
 func (q question) String() string {
@@ -230,8 +259,25 @@ var (
 	ErrorInvalidQNameLength = errors.New("qname: buffer is empty")
 )
 
+func writeQName(qname string) []byte {
+	s := strings.Split(qname, ".")
+	var b []byte
+	for _, label := range s {
+		l := len(label)
+		if l > 0x3f {
+			return nil
+		}
+		b = append(b, uint8(l))
+		for _, by := range label {
+			b = append(b, uint8(by))
+		}
+	}
+	b = append(b, byte(0))
+	return b
+}
+
 // right now I do not support more than 1 RFC 1035 label
-func read_qname(buff []byte) (string, []byte) {
+func readQName(buff []byte) (string, []byte) {
 	// this is the initial length
 
 	labelLen := uint8(buff[0])
@@ -275,21 +321,56 @@ func read_qname(buff []byte) (string, []byte) {
 
 func NewMessage(b []byte) *Message {
 	hdr, b := NewHeader(b)
+	hdr.Write()
 	q, b := newQuestion(b)
 	rr, b := newResourceRecord(b)
-	fmt.Println("resulting length:", len(b))
+	rr.name = q.qname
+	fmt.Println("resulting length:", len(b), rr.name)
 	m := &Message{hdr: *hdr, q: *q, rr: *rr}
 	return m
 }
 
+func (m Message) Write() []byte {
+	bb := []byte{}
+	bb = append(bb, m.hdr.Write()...)
+	bb = append(bb, m.q.Write()...)
+	bb = append(bb, m.rr.Write()...)
+	spew.Dump(bb)
+	return bb
+}
+
 // answer, authority, additional are all types of "resource records"
 type resourceRecord struct {
-	name   []byte
+	name   string
 	rtype  uint16
 	class  uint16
 	ttl    uint32
 	length uint16
 	rdata  uint32
+}
+
+func (rr resourceRecord) Write() []byte {
+	bb := []byte{}
+	qname := writeQName(rr.name)
+	bb = append(bb, qname...)
+	r := []byte{
+		uint8(rr.rtype >> 8),
+		uint8(rr.rtype & 0xff),
+		uint8(rr.class >> 8),
+		uint8(rr.class & 0xff),
+		uint8((rr.ttl >> 24) & 0xff),
+		uint8((rr.ttl >> 16) & 0xff),
+		uint8((rr.ttl >> 8) & 0xff),
+		uint8((rr.ttl >> 0) & 0xff),
+		uint8(rr.length >> 8),
+		uint8(rr.length & 0xff),
+		uint8((rr.rdata >> 24) & 0xff),
+		uint8((rr.rdata >> 16) & 0xff),
+		uint8((rr.rdata >> 8) & 0xff),
+		uint8((rr.rdata >> 0) & 0xff),
+	}
+	r = append(r, bb...)
+	return r
 }
 
 func (rr resourceRecord) String() string {
@@ -306,7 +387,6 @@ func (rr resourceRecord) String() string {
 
 func newResourceRecord(b []byte) (*resourceRecord, []byte) {
 	rr := &resourceRecord{}
-	rr.name = b[0:11]
 	rr.rtype, b = read16(b)
 	rr.class, b = read16(b)
 	rr.ttl, b = read32(b)

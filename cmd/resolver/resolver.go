@@ -9,15 +9,13 @@ import (
 
 func main() {
 	fmt.Println("Resolver Loaded...")
-	addr := net.UDPAddr{Port: 2053, IP: net.ParseIP("127.0.0.1")}
+	addr := net.UDPAddr{Port: 2053, IP: net.IPv4zero}
 	conn, err := net.ListenUDP("udp", &addr)
 	if err != nil {
 		panic(err)
 	}
 
-	defer conn.Close()
-
-	bb := make([]byte, 512)
+	bb := make([]byte, 128)
 	for {
 		rlen, _, err := conn.ReadFromUDP(bb)
 		if err != nil {
@@ -27,8 +25,28 @@ func main() {
 			break
 		}
 	}
+	defer conn.Close()
 
-	spew.Dump(bb)
+	//spew.Dump(bb)
 	message := dns.NewMessage(bb)
-	fmt.Println(message.String())
+	nb := message.Write()
+	raddr := &net.UDPAddr{Port: 53, IP: net.IP{8, 8, 8, 8}}
+	rn, err := conn.WriteToUDP(nb, raddr)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(rn)
+	rbb := make([]byte, 128)
+	for {
+		rrlen, _, err := conn.ReadFromUDP(rbb)
+		if err != nil {
+			panic(err)
+		}
+		if rrlen > 2 {
+			fmt.Println("recv:", rrlen)
+			spew.Dump(rbb)
+			break
+		}
+	}
+
 }
