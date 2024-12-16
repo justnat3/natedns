@@ -30,14 +30,15 @@ func newMsgReader(b []byte) *msgReader {
 }
 
 func (mr *msgReader) read16() uint16 {
-	out := binary.BigEndian.Uint16(mr.buff[mr.pos:2])
+	out := binary.BigEndian.Uint16(mr.buff[mr.pos : mr.pos+2])
 	mr.pos += 2
 	return out
 }
 
 func (mr *msgReader) read32() uint32 {
+	out := binary.BigEndian.Uint32(mr.buff[mr.pos : mr.pos+4])
 	mr.pos += 4
-	return binary.BigEndian.Uint32(mr.buff[mr.pos:4])
+	return out
 }
 
 // NewMessage provides a standard way to reading the msg
@@ -75,12 +76,19 @@ func (m *Msg) parseHeader() {
 	println("---HEADER---")
 	spew.Dump(m.reader.buff)
 
+	println(m.reader.pos, len(m.reader.buff))
 	m.header.id = m.reader.read16()
+	println(m.reader.pos, len(m.reader.buff))
 	m.header.parseQINFO(m.reader.read16())
+	println(m.reader.pos, len(m.reader.buff))
 	m.header.questions = m.reader.read16()
+	println(m.reader.pos, len(m.reader.buff))
 	m.header.answers = m.reader.read16()
+	println(m.reader.pos, len(m.reader.buff))
 	m.header.authorities = m.reader.read16()
+	println(m.reader.pos)
 	m.header.additionals = m.reader.read16()
+	println(m.reader.pos)
 }
 
 func (m *Msg) parseQuestion() question {
@@ -95,7 +103,7 @@ func (m *Msg) parseQuestion() question {
 func (m *Msg) readQName() string {
 	// this is the initial length
 
-	labelLen := uint8(m.reader.buff[0])
+	labelLen := uint8(m.reader.buff[m.reader.pos])
 	m.reader.pos++
 
 	// 06 67 6f 6f 67 6c 65 03  63 6f 6d 00  |.google.com.|
