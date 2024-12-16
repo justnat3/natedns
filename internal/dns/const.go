@@ -10,6 +10,7 @@ const (
 )
 
 var (
+	ErrorInvalidHeader      = errors.New("header: invalid")
 	ErrorInvalidQNameLength = errors.New("qname: buffer is empty")
 )
 

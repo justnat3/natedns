@@ -1,7 +1,6 @@
 package dns
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -26,10 +25,6 @@ type header struct {
 	authorities uint16 // how many rr records in authority records
 	additionals uint16 // rr records in additional records
 }
-
-var (
-	ErrorInvalidHeader = errors.New("header: invalid")
-)
 
 func (hdr header) String() string {
 	newline :=
@@ -83,17 +78,12 @@ func (hdr header) write() []byte {
 }
 
 type question struct {
-	qname  string
-	qtype  uint16
+	// question name could be like "google.com"
+	qname string
+	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
+	qtype uint16
+	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
 	qclass uint16
-}
-
-func (m *Msg) parseQuestion() question {
-	q := question{}
-	q.qname = m.readQName()
-	q.qtype = m.reader.read16()
-	q.qclass = m.reader.read16()
-	return q
 }
 
 func (q question) write() []byte {
@@ -138,49 +128,6 @@ func writeQName(qname string) []byte {
 	return b
 }
 
-// right now I do not support more than 1 RFC 1035 label
-func (m *Msg) readQName() string {
-	// this is the initial length
-
-	labelLen := uint8(m.reader.buff[0])
-	m.reader.pos++
-
-	// 06 67 6f 6f 67 6c 65 03  63 6f 6d 00  |.google.com.|
-	// in this case the first byte is "6" which is "google"
-	// then after we've read 6, we get the byte "3" which is "com" and then NULL
-	// which means that we are done reading.
-	if labelLen > 63 {
-		panic(ErrorInvalidQNameLength)
-	}
-
-	if len(m.reader.buff) < 1 {
-		panic(ErrorInvalidQNameLength)
-	}
-
-	str := ""
-	for {
-		if m.reader.buff[m.reader.pos] == 0 {
-			break
-		}
-
-		if int(labelLen) == 0 {
-			str += string('.')
-			labelLen = uint8(m.reader.buff[m.reader.pos])
-			m.reader.pos++
-		}
-
-		str += string(m.reader.buff[m.reader.pos])
-		labelLen--
-		m.reader.pos++
-	}
-
-	if len(str) < 1 {
-		panic(ErrorInvalidQNameLength)
-	}
-
-	return str
-}
-
 // answer, authority, additional are all types of "resource records"
 type resourceRecord struct {
 	name   string
@@ -213,12 +160,4 @@ func (rr resourceRecord) write() []byte {
 	}
 	r = append(r, bb...)
 	return r
-}
-
-func (m *Msg) parseRR() {
-	m.resource.rtype = m.reader.read16()
-	m.resource.class = m.reader.read16()
-	m.resource.ttl = m.reader.read32()
-	m.resource.length = m.reader.read16()
-	m.resource.rdata = m.reader.read32()
 }
