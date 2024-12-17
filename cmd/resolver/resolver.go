@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/justnat3/natedns/internal/dns"
 )
 
@@ -16,7 +15,7 @@ func main() {
 		panic(err)
 	}
 
-	bb := make([]byte, 128)
+	bb := make([]byte, 512)
 	for {
 		rlen, _, err := conn.ReadFromUDP(bb)
 		if err != nil {
@@ -38,7 +37,7 @@ func main() {
 		panic(err)
 	}
 
-	rbb := make([]byte, 128)
+	rbb := make([]byte, 512)
 
 	for {
 		rrlen, _, err := conn.ReadFromUDP(rbb)
@@ -47,10 +46,9 @@ func main() {
 		}
 		if rrlen > 2 {
 			println("--READ FROM UDP---")
-			spew.Dump(rbb)
 			break
 		}
 	}
 
-	spew.Dump(dns.NewMessage(rbb))
+	_ = dns.NewMessage(rbb)
 }

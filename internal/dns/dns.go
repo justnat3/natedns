@@ -84,7 +84,7 @@ type question struct {
 	// question name could be like "google.com"
 	qname string
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
-	qtype uint16
+	qtype qtype
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
 	qclass uint16
 }

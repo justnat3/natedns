@@ -280,7 +280,7 @@ func (qt qtype) String() string {
 	case Txt:
 		return "TXT"
 	default:
-		panic("unknown qtype")
+		return "UNKNOWN"
 	}
 }
 

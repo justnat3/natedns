@@ -2,6 +2,9 @@ package dns
 
 import (
 	"encoding/binary"
+	"net"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
@@ -12,13 +15,18 @@ type Msg struct {
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
 	question
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
+
 	// FIXME: should probably do something different than hold potentially nil pointers
+	Records []Record
+}
 
-	lastQType uint8
-
-	// this depends on the record qtype
-	*URecord
-	*ARecord
+type Record struct {
+	// NOTE(nate): this includes A records :)
+	_type  qtype
+	ttl    uint16
+	addr   *net.IP
+	len    *uint16
+	domain string
 }
 
 // msgReader defines a way to read the DNS Message as a buffer
@@ -50,7 +58,10 @@ func NewMessage(b []byte) *Msg {
 	msg := &Msg{reader: newMsgReader(b)}
 	msg.parseHeader()
 	msg.parseQuestion()
-	msg.parseRR()
+	_ = msg.readQName()
+	for range msg.answers {
+		msg.parseDNSRecord()
+	}
 	return msg
 }
 
@@ -58,25 +69,57 @@ func (m Msg) Write() []byte {
 	bb := []byte{}
 	bb = append(bb, m.header.write()...)
 	bb = append(bb, m.question.write()...)
-	// bb = append(bb, m.record.write()...)
-	println("---SEND---")
 	return bb
 }
 
-func (m *Msg) parseRR() {
-	println("authorities:", m.nsRecs)
-	println("additions:", m.addRecs)
-	println("questions:", m.questions)
-	println("answers:", m.answers)
-	qtype := m.reader.read16()
-	_ = m.reader.read16()
-	ttl := m.reader.read32()
+func (m *Msg) readTo(len uint16) []byte {
+	buff := make([]byte, len)
+
+	_len := int(len) // where is size_t when you need it :\
+
+	if m.reader.pos+_len > m.reader.bufflen {
+		panic("dns-readto: the buffer is too short dumby")
+	}
+
+	for m.reader.pos >= m.reader.pos+_len {
+		buff = append(buff, m.reader.buff[m.reader.pos])
+		m.reader.pos++
+	}
+
+	return buff
+}
+
+func (m *Msg) parseDNSRecord() {
+	_qtype := m.reader.read16()
+	_ = m.reader.read32() // class
+	ttl := m.reader.read16()
 	len := m.reader.read16()
 
-	print("qtype:", qtype)
-	print("ttl:", ttl)
-	print("len:", len)
+	switch qtype(_qtype) {
+	case A:
+		addr := m.reader.read32()
+		ip := net.IPv4(
+			uint8((addr>>24)&0xff),
+			uint8((addr>>16)&0xff),
+			uint8((addr>>8)&0xff),
+			uint8((addr>>0)&0xff),
+		)
+		record := Record{_type: A, addr: &ip, ttl: ttl, len: &len}
+		m.Records = append(m.Records, record)
+	default:
+		m.reader.pos--
+		addr := m.reader.read32()
+		ip := net.IPv4(
+			uint8((addr>>24)&0xff),
+			uint8((addr>>16)&0xff),
+			uint8((addr>>8)&0xff),
+			uint8((addr>>0)&0xff),
+		)
+		spew.Dump(ip)
+		println("unknown", qtype(_qtype).String())
+		panic("?")
 
+	}
 }
 
 // parseHeader provides a standard way to reading the msg header
@@ -92,7 +135,7 @@ func (m *Msg) parseHeader() {
 func (m *Msg) parseQuestion() {
 	q := question{}
 	q.qname = m.readQName()
-	q.qtype = m.reader.read16()
+	q.qtype = qtype(m.reader.read16())
 	q.qclass = m.reader.read16()
 }
 
@@ -101,7 +144,6 @@ func (m *Msg) readQName() string {
 	// this is the initial length
 
 	labelLen := uint8(m.reader.buff[m.reader.pos])
-	m.reader.pos++
 
 	// 06 67 6f 6f 67 6c 65 03  63 6f 6d 00  |.google.com.|
 	// in this case the first byte is "6" which is "google"
