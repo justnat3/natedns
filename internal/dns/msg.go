@@ -4,10 +4,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"time"
 )
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
 type Msg struct {
+	took   time.Duration
 	reader *msgReader
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
 	header
@@ -22,6 +24,7 @@ type Msg struct {
 type Record struct {
 	// NOTE(nate): this includes A records :)
 	_type  qtype
+	_class class
 	ttl    uint32
 	addr   *net.IP
 	len    *uint16
@@ -60,6 +63,7 @@ func (mr *msgReader) read64() uint64 {
 
 // NewMessage provides a standard way to reading the msg
 func NewMessage(b []byte) *Msg {
+	t := time.Now()
 	msg := &Msg{reader: newMsgReader(b)}
 	msg.parseHeader()
 	msg.parseQuestion()
@@ -70,11 +74,8 @@ func NewMessage(b []byte) *Msg {
 		msg.parseDNSRecord()
 	}
 
-	for _, r := range msg.Records {
-		if r.addr != nil {
-			println(r.addr.String())
-		}
-	}
+	msg.took = time.Since(t)
+	msg.Print()
 	return msg
 }
 
@@ -122,14 +123,14 @@ func (m *Msg) readIPAddr() *net.IP {
 
 func (m *Msg) parseDNSRecord() {
 	_qtype := m.reader.read16()
-	_ = m.reader.read16() // class
+	_class := m.reader.read16() // class
 	ttl := m.reader.read32()
 	len := m.reader.read16()
 
 	switch qtype(_qtype) {
 	case A:
 		ip := m.readIPAddr()
-		record := newRecord(Ptr, ttl, &len, WithAddr(ip))
+		record := newRecord(class(_class), A, ttl, &len, WithAddr(ip))
 		m.Records = append(m.Records, record)
 
 	case Ptr:
@@ -150,7 +151,7 @@ func (m *Msg) parseDNSRecord() {
 		domain := m.readQName()
 		m.reader.pos = old
 
-		record := newRecord(Ptr, ttl, &len, WithAddr(ip), WithDomain(domain))
+		record := newRecord(class(_class), Ptr, ttl, &len, WithAddr(ip), WithDomain(domain))
 		m.Records = append(m.Records, record)
 
 		return
@@ -171,11 +172,31 @@ func WithDomain(s string) recordOption {
 	}
 }
 
-func newRecord(_type qtype, ttl uint32, len *uint16, opts ...recordOption) Record {
+func (m Msg) Print() {
+
+	if len(m.Records) < 1 {
+		return
+	}
+	println("; <<>> natedns (linux) <<>>" + m.Records[0].domain)
+	println(";; Got answer:")
+	println(";; ->>Header<<- opcode:", m.opcode.String(), "status:", m.reponseCode.String(), "id:", m.id)
+	println(";; flags:", m.queryReponse.String(), m.recursionDesired.String(), m.recursionAvaiable.String(), "; Query:", m.queryReponse.String())
+	println("Answer:", m.answers, "Authority:", m.nsRecs, "Additional:", m.addRecs)
+
+	println(";; Question Section:")
+	for _, r := range m.Records {
+		println(r.domain, r._type.String(), r._class.String(), r.addr.String())
+	}
+
+	println(";; Query Time:", m.took.String())
+	println(";; Server: 127.0.0.1 (UDP)")
+}
+func newRecord(_class class, _type qtype, ttl uint32, len *uint16, opts ...recordOption) Record {
 	record := Record{
-		_type: _type,
-		ttl:   ttl,
-		len:   len,
+		_class: _class,
+		_type:  _type,
+		ttl:    ttl,
+		len:    len,
 	}
 
 	for _, o := range opts {
