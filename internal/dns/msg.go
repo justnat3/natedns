@@ -2,9 +2,8 @@ package dns
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
@@ -23,7 +22,7 @@ type Msg struct {
 type Record struct {
 	// NOTE(nate): this includes A records :)
 	_type  qtype
-	ttl    uint16
+	ttl    uint32
 	addr   *net.IP
 	len    *uint16
 	domain string
@@ -53,14 +52,28 @@ func (mr *msgReader) read32() uint32 {
 	return out
 }
 
+func (mr *msgReader) read64() uint64 {
+	out := binary.BigEndian.Uint64(mr.buff[mr.pos : mr.pos+8])
+	mr.pos += 8
+	return out
+}
+
 // NewMessage provides a standard way to reading the msg
 func NewMessage(b []byte) *Msg {
 	msg := &Msg{reader: newMsgReader(b)}
 	msg.parseHeader()
 	msg.parseQuestion()
-	_ = msg.readQName()
+	domain := msg.readQName()
+
+	print(domain)
 	for range msg.answers {
 		msg.parseDNSRecord()
+	}
+
+	for _, r := range msg.Records {
+		if r.addr != nil {
+			println(r.addr.String())
+		}
 	}
 	return msg
 }
@@ -89,37 +102,87 @@ func (m *Msg) readTo(len uint16) []byte {
 	return buff
 }
 
+func printbin(i ...uint16) {
+	for _, i := range i {
+		print(fmt.Sprintf("%b ", i))
+	}
+	println()
+}
+
+func (m *Msg) readIPAddr() *net.IP {
+	addr := m.reader.read32()
+	ip := net.IPv4(
+		uint8((addr>>24)&0xff),
+		uint8((addr>>16)&0xff),
+		uint8((addr>>8)&0xff),
+		uint8((addr>>0)&0xff),
+	)
+	return &ip
+}
+
 func (m *Msg) parseDNSRecord() {
 	_qtype := m.reader.read16()
-	_ = m.reader.read32() // class
-	ttl := m.reader.read16()
+	_ = m.reader.read16() // class
+	ttl := m.reader.read32()
 	len := m.reader.read16()
 
 	switch qtype(_qtype) {
 	case A:
-		addr := m.reader.read32()
-		ip := net.IPv4(
-			uint8((addr>>24)&0xff),
-			uint8((addr>>16)&0xff),
-			uint8((addr>>8)&0xff),
-			uint8((addr>>0)&0xff),
-		)
-		record := Record{_type: A, addr: &ip, ttl: ttl, len: &len}
+		ip := m.readIPAddr()
+		record := newRecord(Ptr, ttl, &len, WithAddr(ip))
 		m.Records = append(m.Records, record)
-	default:
-		m.reader.pos--
-		addr := m.reader.read32()
-		ip := net.IPv4(
-			uint8((addr>>24)&0xff),
-			uint8((addr>>16)&0xff),
-			uint8((addr>>8)&0xff),
-			uint8((addr>>0)&0xff),
-		)
-		spew.Dump(ip)
-		println("unknown", qtype(_qtype).String())
-		panic("?")
 
+	case Ptr:
+		// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
+		offset := m.reader.read16()
+		ip := m.readIPAddr()
+
+		offset = offset & (1 << 2)
+		if offset < 1 {
+			return
+		}
+
+		old := m.reader.pos
+		m.reader.pos = int(offset)
+
+		_ = m.reader.read64()
+
+		domain := m.readQName()
+		m.reader.pos = old
+
+		record := newRecord(Ptr, ttl, &len, WithAddr(ip), WithDomain(domain))
+		m.Records = append(m.Records, record)
+
+		return
 	}
+}
+
+type recordOption func(*Record)
+
+func WithAddr(ip *net.IP) recordOption {
+	return func(r *Record) {
+		r.addr = ip
+	}
+}
+
+func WithDomain(s string) recordOption {
+	return func(r *Record) {
+		r.domain = s
+	}
+}
+
+func newRecord(_type qtype, ttl uint32, len *uint16, opts ...recordOption) Record {
+	record := Record{
+		_type: _type,
+		ttl:   ttl,
+		len:   len,
+	}
+
+	for _, o := range opts {
+		o(&record)
+	}
+
+	return record
 }
 
 // parseHeader provides a standard way to reading the msg header
@@ -163,13 +226,13 @@ func (m *Msg) readQName() string {
 			break
 		}
 
+		str += string(m.reader.buff[m.reader.pos])
 		if int(labelLen) == 0 {
 			str += string('.')
 			labelLen = uint8(m.reader.buff[m.reader.pos])
 			m.reader.pos++
 		}
 
-		str += string(m.reader.buff[m.reader.pos])
 		labelLen--
 		m.reader.pos++
 	}
