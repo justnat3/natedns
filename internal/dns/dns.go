@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// header (12 bytes)
 type header struct {
 	id uint16 // message id
 
@@ -20,15 +19,15 @@ type header struct {
 	z                   uint8              // future use
 
 	// counters
-	questions   uint16 // how many questions
-	answers     uint16 // how many answers
-	authorities uint16 // how many rr records in authority records
-	additionals uint16 // rr records in additional records
+	questions uint16 // how many questions
+	answers   uint16 // how many answers
+	nsRecs    uint16 // how many rr records in authority records
+	addRecs   uint16 // rr records in additional records
 }
 
 func (hdr header) String() string {
 	newline :=
-		"id: %d\n qr: %s\n opcode: %s\n aa: %s\n tc: %s\n rd: %s\n ra: %s\n z: %s\n rcode: %s\n qd: %s\n an: %s\n ns: %s\n ar: %s"
+		"id: %d\n qr: %s\n opcode: %s\n aa: %s\n tc: %s\n rd: %s\n ra: %s\n z: %s\n rcode: %s\n questions: %d\n answers: %d\n author: %d\n add: %d"
 	return fmt.Sprintf(
 		newline,
 		hdr.id,
@@ -42,20 +41,24 @@ func (hdr header) String() string {
 		hdr.reponseCode,
 		hdr.questions,
 		hdr.answers,
-		hdr.authorities,
-		hdr.additionals,
+		hdr.nsRecs,
+		hdr.addRecs,
 	)
 }
 
-func (h *header) parseQINFO(qinfo uint16) {
-	h.queryReponse = QR((qinfo & QrMask) >> 15)
-	h.authoritativeAnswer = Authoritative((qinfo & AAMask) >> 10)
-	h.truncation = Truncation((qinfo & TCMask) >> 9)
-	h.recursionDesired = RecursionDesired((qinfo & RDMask) >> 8)
-	h.recursionAvaiable = RecursionAvailable((qinfo & RAMask) >> 7)
-	h.z = uint8((qinfo & ZMask) >> 6)
-	h.reponseCode = ResponseCode((qinfo & RCodeMask))
-	h.opcode = Opcode((qinfo & OPCodeMask) >> 11)
+func (h *header) parseHdrFlags(qinfo uint16) {
+	// lower: 10000000
+	lower := uint8(qinfo >> 8)
+	// upper: 10100011
+	upper := uint8(qinfo & 0xff)
+	h.recursionDesired = RecursionDesired(lower & (1 << 0))
+	h.truncation = Truncation(lower & (1 << 1))
+	h.authoritativeAnswer = Authoritative(lower & (1 << 2))
+	h.opcode = Opcode((lower >> 3) & 0x0f)
+	h.queryReponse = QR(lower & (1 << 6))
+	h.recursionAvaiable = RecursionAvailable((upper & (1 << 6)))
+	h.z = uint8((upper & (1 << 1)) & 0xf0)
+	h.reponseCode = ResponseCode(upper & 0x0f)
 }
 
 func (hdr header) write() []byte {
@@ -68,10 +71,10 @@ func (hdr header) write() []byte {
 		uint8(hdr.questions & 0xff),
 		uint8(hdr.answers >> 8),
 		uint8(hdr.answers & 0xff),
-		uint8(hdr.authorities >> 8),
-		uint8(hdr.authorities & 0xff),
-		uint8(hdr.additionals >> 8),
-		uint8(hdr.additionals & 0xff),
+		uint8(hdr.nsRecs >> 8),
+		uint8(hdr.nsRecs & 0xff),
+		uint8(hdr.addRecs >> 8),
+		uint8(hdr.addRecs & 0xff),
 	}
 
 	return buff
@@ -129,35 +132,39 @@ func writeQName(qname string) []byte {
 }
 
 // answer, authority, additional are all types of "resource records"
-type resourceRecord struct {
-	name   string
-	rtype  uint16
-	class  uint16
-	ttl    uint32
+type URecord struct {
+	domain string
+	qtype  uint16
 	length uint16
-	rdata  uint32
+	ttl    uint32
 }
 
-func (rr resourceRecord) write() []byte {
-	bb := []byte{}
-	qname := writeQName(rr.name)
-	bb = append(bb, qname...)
-	r := []byte{
-		uint8(rr.rtype >> 8),
-		uint8(rr.rtype & 0xff),
-		uint8(rr.class >> 8),
-		uint8(rr.class & 0xff),
-		uint8((rr.ttl >> 24) & 0xff),
-		uint8((rr.ttl >> 16) & 0xff),
-		uint8((rr.ttl >> 8) & 0xff),
-		uint8((rr.ttl >> 0) & 0xff),
-		uint8(rr.length >> 8),
-		uint8(rr.length & 0xff),
-		uint8((rr.rdata >> 24) & 0xff),
-		uint8((rr.rdata >> 16) & 0xff),
-		uint8((rr.rdata >> 8) & 0xff),
-		uint8((rr.rdata >> 0) & 0xff),
-	}
-	r = append(r, bb...)
-	return r
+type ARecord struct {
+	domain string
+	addr   uint32
+	ttl    uint32
 }
+
+// func (rr URecord) write() []byte {
+// 	bb := []byte{}
+// 	qname := writeQName(rr.domain)
+// 	bb = append(bb, qname...)
+// 	r := []byte{
+// 		uint8(rr.qtype >> 8),
+// 		uint8(rr.qtype & 0xff),
+// 		uint8(rr.class >> 8),
+// 		uint8(rr.class & 0xff),
+// 		uint8((rr.ttl >> 24) & 0xff),
+// 		uint8((rr.ttl >> 16) & 0xff),
+// 		uint8((rr.ttl >> 8) & 0xff),
+// 		uint8((rr.ttl >> 0) & 0xff),
+// 		uint8(rr.length >> 8),
+// 		uint8(rr.length & 0xff),
+// 		uint8((rr.rdata >> 24) & 0xff),
+// 		uint8((rr.rdata >> 16) & 0xff),
+// 		uint8((rr.rdata >> 8) & 0xff),
+// 		uint8((rr.rdata >> 0) & 0xff),
+// 	}
+// 	r = append(r, bb...)
+// 	return r
+// }

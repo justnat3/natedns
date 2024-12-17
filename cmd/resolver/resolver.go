@@ -52,8 +52,5 @@ func main() {
 		}
 	}
 
-	m := dns.NewMessage(rbb)
-	println("--READ FORWARDED--")
-	spew.Dump(m)
-
+	spew.Dump(dns.NewMessage(rbb))
 }

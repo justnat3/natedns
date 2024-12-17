@@ -2,19 +2,23 @@ package dns
 
 import (
 	"encoding/binary"
-	"fmt"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
 type Msg struct {
 	reader *msgReader
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
-	header   header
-	question question
+	header
+	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
+	question
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
-	resource resourceRecord
+	// FIXME: should probably do something different than hold potentially nil pointers
+
+	lastQType uint8
+
+	// this depends on the record qtype
+	*URecord
+	*ARecord
 }
 
 // msgReader defines a way to read the DNS Message as a buffer
@@ -45,11 +49,8 @@ func (mr *msgReader) read32() uint32 {
 func NewMessage(b []byte) *Msg {
 	msg := &Msg{reader: newMsgReader(b)}
 	msg.parseHeader()
-	question := msg.parseQuestion()
+	msg.parseQuestion()
 	msg.parseRR()
-	msg.resource.name = question.qname
-
-	fmt.Println("resulting length:", len(b), msg.resource.name)
 	return msg
 }
 
@@ -57,46 +58,42 @@ func (m Msg) Write() []byte {
 	bb := []byte{}
 	bb = append(bb, m.header.write()...)
 	bb = append(bb, m.question.write()...)
-	bb = append(bb, m.resource.write()...)
+	// bb = append(bb, m.record.write()...)
 	println("---SEND---")
-	spew.Dump(bb)
 	return bb
 }
 
 func (m *Msg) parseRR() {
-	m.resource.rtype = m.reader.read16()
-	m.resource.class = m.reader.read16()
-	m.resource.ttl = m.reader.read32()
-	m.resource.length = m.reader.read16()
-	m.resource.rdata = m.reader.read32()
+	println("authorities:", m.nsRecs)
+	println("additions:", m.addRecs)
+	println("questions:", m.questions)
+	println("answers:", m.answers)
+	qtype := m.reader.read16()
+	_ = m.reader.read16()
+	ttl := m.reader.read32()
+	len := m.reader.read16()
+
+	print("qtype:", qtype)
+	print("ttl:", ttl)
+	print("len:", len)
+
 }
 
 // parseHeader provides a standard way to reading the msg header
 func (m *Msg) parseHeader() {
-	println("---HEADER---")
-	spew.Dump(m.reader.buff)
-
-	println(m.reader.pos, len(m.reader.buff))
 	m.header.id = m.reader.read16()
-	println(m.reader.pos, len(m.reader.buff))
-	m.header.parseQINFO(m.reader.read16())
-	println(m.reader.pos, len(m.reader.buff))
+	m.header.parseHdrFlags(m.reader.read16())
 	m.header.questions = m.reader.read16()
-	println(m.reader.pos, len(m.reader.buff))
 	m.header.answers = m.reader.read16()
-	println(m.reader.pos, len(m.reader.buff))
-	m.header.authorities = m.reader.read16()
-	println(m.reader.pos)
-	m.header.additionals = m.reader.read16()
-	println(m.reader.pos)
+	m.header.nsRecs = m.reader.read16()
+	m.header.addRecs = m.reader.read16()
 }
 
-func (m *Msg) parseQuestion() question {
+func (m *Msg) parseQuestion() {
 	q := question{}
 	q.qname = m.readQName()
 	q.qtype = m.reader.read16()
 	q.qclass = m.reader.read16()
-	return q
 }
 
 // right now I do not support more than 1 RFC 1035 label

@@ -17,14 +17,15 @@ var (
 func (qr QR) String() string {
 	switch qr {
 	case Query:
-		return "QUERY"
+		return "Query"
 	case Response:
-		return "RESPONSE"
+		return "Response"
 	default:
 		panic("Invalid Query/Response")
 	}
 }
 
+// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
 type Opcode uint8
 
 const (
@@ -40,11 +41,11 @@ const (
 func (o Opcode) String() string {
 	switch o {
 	case Std:
-		return "STD"
+		return "Standard"
 	case Inverse:
-		return "INVERSE"
+		return "Inverse"
 	case ServerStatus:
-		return "SERVER STATUS"
+		return "Server STatus"
 	case AFA:
 		return "AFA"
 	case Notify:
@@ -52,7 +53,7 @@ func (o Opcode) String() string {
 	case Update:
 		return "Update"
 	default:
-		return "RESERVED"
+		return "Reserved"
 	}
 }
 
@@ -215,22 +216,23 @@ func (a RecursionAvailable) String() string {
 type qtype uint8
 
 const (
-	A     qtype = iota + 1 // a host address
-	Ns                     // an authoritative name server
-	Md                     // a mail destination (Obsolete - use MX)
-	Mf                     // a mail forwarder (Obsolete - use MX)
-	Cname                  // the canonical name for an alias
-	Soa                    // marks the start of a zone of authority
-	Mb                     // a mailbox domain name (EXPERIMENTAL)
-	Mg                     // a mail group member (EXPERIMENTAL)
-	Mr                     // a mail rename domain name (EXPERIMENTAL)
-	Null                   // a null RR (EXPERIMENTAL)
-	Wks                    // a well known service description
-	Ptr                    // a domain name pointer
-	Hinfo                  // host information
-	Minfo                  // mailbox or mail list information
-	Mx                     // mail exchange
-	Txt                    // text strings
+	Unknown qtype = iota // ??
+	A                    // a host address
+	Ns                   // an authoritative name server
+	Md                   // a mail destination (Obsolete - use MX)
+	Mf                   // a mail forwarder (Obsolete - use MX)
+	Cname                // the canonical name for an alias
+	Soa                  // marks the start of a zone of authority
+	Mb                   // a mailbox domain name (EXPERIMENTAL)
+	Mg                   // a mail group member (EXPERIMENTAL)
+	Mr                   // a mail rename domain name (EXPERIMENTAL)
+	Null                 // a null RR (EXPERIMENTAL)
+	Wks                  // a well known service description
+	Ptr                  // a domain name pointer
+	Hinfo                // host information
+	Minfo                // mailbox or mail list information
+	Mx                   // mail exchange
+	Txt                  // text strings
 )
 
 // QTYPE fields appear in the question part of a query.  QTYPES are a
@@ -308,15 +310,3 @@ func (c class) String() string {
 		panic("invalid class")
 	}
 }
-
-// bit masks for common fields
-const (
-	QrMask     uint16 = 0x8000 // 1 bit
-	OPCodeMask        = 0x7800 // 4 bits
-	AAMask            = 0x0400 // 1 bit
-	TCMask            = 0x0200 // 1 bit
-	RDMask            = 0x0100 // 1 bit
-	RAMask            = 0x0080 // 1 bit
-	ZMask             = 0x0040 // 1 bit
-	RCodeMask         = 0x003F // 4 bits
-)
