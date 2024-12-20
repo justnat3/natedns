@@ -47,15 +47,16 @@ func (hdr header) String() string {
 }
 
 func (h *header) parseHdrFlags(qinfo uint16) {
-	// lower: 10000000
 	lower := uint8(qinfo >> 8)
-	// upper: 10100011
 	upper := uint8(qinfo & 0xff)
 	h.recursionDesired = RecursionDesired(lower & (1 << 0))
 	h.truncation = Truncation(lower & (1 << 1))
 	h.authoritativeAnswer = Authoritative(lower & (1 << 2))
 	h.opcode = Opcode((lower >> 3) & 0x0f)
-	h.queryReponse = QR(lower & (1 << 6))
+	h.queryReponse = QR(0)
+	if lower&(1<<7) > 0 {
+		h.queryReponse = QR(1)
+	}
 	h.recursionAvaiable = RecursionAvailable((upper & (1 << 6)))
 	h.z = uint8((upper & (1 << 1)) & 0xf0)
 	h.reponseCode = ResponseCode(upper & 0x0f)
@@ -86,7 +87,7 @@ type question struct {
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
 	qtype qtype
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
-	qclass uint16
+	qclass class
 }
 
 func (q question) write() []byte {

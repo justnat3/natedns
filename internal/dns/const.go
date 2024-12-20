@@ -1,6 +1,8 @@
 package dns
 
-import "errors"
+import (
+	"errors"
+)
 
 type QR uint8
 
@@ -21,7 +23,7 @@ func (qr QR) String() string {
 	case Response:
 		return "Response"
 	default:
-		panic("Invalid Query/Response")
+		return string(qr)
 	}
 }
 
@@ -103,9 +105,9 @@ const (
 func (a RecursionDesired) String() string {
 	switch a {
 	case RecursionDesiredYes:
-		return "RECURSION DESIRED YES"
+		return ";rd"
 	case RecursionDesiredNo:
-		return "RECURSION DESIRED NO"
+		return ";rd-no"
 	default:
 		panic("unknown RD")
 	}
@@ -205,9 +207,9 @@ const (
 func (a RecursionAvailable) String() string {
 	switch a {
 	case RecursionAvailableYes:
-		return "RECURSION AVAIALABLE YES"
+		return ";ra"
 	case RecursionAvailableNo:
-		return "RECURSION AVAIALABLE NO"
+		return ";ra-no"
 	default:
 		panic("unknown RD")
 	}
@@ -307,6 +309,7 @@ func (c class) String() string {
 	case classStar:
 		return "Class Star"
 	default:
-		panic("invalid class")
+		println("INCORRECT_CLASS:", c)
+		return ""
 	}
 }

@@ -2,6 +2,8 @@ package dns
 
 import (
 	"encoding/binary"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -38,26 +40,64 @@ type msgReader struct {
 	bufflen int    // len of the buffer read once
 }
 
+func (m *msgReader) current() uint8 {
+	return m.buff[m.pos]
+}
+
+func (m *msgReader) advance() {
+	m.pos++
+}
+
+func (m *msgReader) advanceN(amount int) {
+	if m.pos+amount > len(m.buff) {
+		panic("tried to read too far")
+	}
+	m.pos += amount
+}
+
+func (m *msgReader) window(w int) {
+	if m.pos+w > len(m.buff) {
+		println("UP_TO-window_of", m.pos, "@", hex.EncodeToString(m.buff[w-m.pos:m.pos]))
+		return
+	}
+
+	if m.pos-w < 0 {
+		println("DOWN_TO-window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos:m.pos]))
+		return
+	}
+
+	println("window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos-w:m.pos+w]))
+}
+
+func (m *msgReader) jumpTo(pos int) {
+	if pos > len(m.buff) {
+		panic("oopsies jumped too far")
+	}
+
+	m.pos = pos
+	// m.window(4)
+}
+
 // newMsgReader returns a msgReader with the buff and len intialized
 func newMsgReader(b []byte) *msgReader {
 	return &msgReader{buff: b, bufflen: len(b)}
 }
 
-func (mr *msgReader) read16() uint16 {
-	out := binary.BigEndian.Uint16(mr.buff[mr.pos : mr.pos+2])
-	mr.pos += 2
+func (m *msgReader) read16() uint16 {
+	out := binary.BigEndian.Uint16(m.buff[m.pos : m.pos+2])
+	m.advanceN(2)
 	return out
 }
 
-func (mr *msgReader) read32() uint32 {
-	out := binary.BigEndian.Uint32(mr.buff[mr.pos : mr.pos+4])
-	mr.pos += 4
+func (m *msgReader) read32() uint32 {
+	out := binary.BigEndian.Uint32(m.buff[m.pos : m.pos+4])
+	m.advanceN(4)
 	return out
 }
 
-func (mr *msgReader) read64() uint64 {
-	out := binary.BigEndian.Uint64(mr.buff[mr.pos : mr.pos+8])
-	mr.pos += 8
+func (m *msgReader) read64() uint64 {
+	out := binary.BigEndian.Uint64(m.buff[m.pos : m.pos+8])
+	m.advanceN(8)
 	return out
 }
 
@@ -67,9 +107,7 @@ func NewMessage(b []byte) *Msg {
 	msg := &Msg{reader: newMsgReader(b)}
 	msg.parseHeader()
 	msg.parseQuestion()
-	domain := msg.readQName()
 
-	print(domain)
 	for range msg.answers {
 		msg.parseDNSRecord()
 	}
@@ -96,8 +134,8 @@ func (m *Msg) readTo(len uint16) []byte {
 	}
 
 	for m.reader.pos >= m.reader.pos+_len {
-		buff = append(buff, m.reader.buff[m.reader.pos])
-		m.reader.pos++
+		buff = append(buff, m.reader.current())
+		m.reader.advance()
 	}
 
 	return buff
@@ -121,41 +159,60 @@ func (m *Msg) readIPAddr() *net.IP {
 	return &ip
 }
 
+//		  0
+// 0000   d5 7e 81 80 00 01 00 06 00 00 00 01 06 67 6f 6f   .~...........goo
+// 0010   67 6c 65 03 63 6f 6d 00 00 01 00 01 c0 0c 00 01   gle.com.........
+// 0020   00 01 00 00 01 07 00 04 8e fa 71 8b c0 0c 00 01   ..........q.....
+// 0030   00 01 00 00 01 07 00 04 8e fa 71 71 c0 0c 00 01   ..........qq....
+// 0040   00 01 00 00 01 07 00 04 8e fa 71 65 c0 0c 00 01   ..........qe....
+// 0050   00 01 00 00 01 07 00 04 8e fa 71 66 c0 0c 00 01   ..........qf....
+// 0060   00 01 00 00 01 07 00 04 8e fa 71 64 c0 0c 00 01   ..........qd....
+// 0070   00 01 00 00 01 07 00 04 8e fa 71 8a 00 00 29 02   ..........q...).
+// 0080   00 00 00 00 00 00 00                              .......
+
 func (m *Msg) parseDNSRecord() {
+	domain := m.readQName()
 	_qtype := m.reader.read16()
 	_class := m.reader.read16() // class
 	ttl := m.reader.read32()
 	len := m.reader.read16()
-
-	switch qtype(_qtype) {
-	case A:
+	println(";;", domain, qtype(_qtype).String(), class(_class).String(), ttl, len)
+	if len == 4 {
 		ip := m.readIPAddr()
-		record := newRecord(class(_class), A, ttl, &len, WithAddr(ip))
+		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithAddr(ip))
 		m.Records = append(m.Records, record)
-
-	case Ptr:
-		// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
-		offset := m.reader.read16()
-		ip := m.readIPAddr()
-
-		offset = offset & (1 << 2)
-		if offset < 1 {
-			return
-		}
-
-		old := m.reader.pos
-		m.reader.pos = int(offset)
-
-		_ = m.reader.read64()
-
-		domain := m.readQName()
-		m.reader.pos = old
-
-		record := newRecord(class(_class), Ptr, ttl, &len, WithAddr(ip), WithDomain(domain))
-		m.Records = append(m.Records, record)
-
-		return
 	}
+	return
+
+	// switch qtype(_qtype) {
+	// case A:
+	// 	ip := m.readIPAddr()
+	// 	record := newRecord(class(_class), A, ttl, &len, WithAddr(ip))
+	// 	m.Records = append(m.Records, record)
+
+	// case Ptr:
+	// 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
+	// 	// offset := m.reader.read16()
+	// 	// ip := m.readIPAddr()
+
+	// 	// offset = offset & (1 << 2)
+	// 	// if offset < 1 {
+	// 	// 	return
+	// 	// }
+
+	// 	// old := m.reader.pos
+	// 	// m.reader.pos = int(offset)
+
+	// 	// _ = m.reader.read64()
+
+	// 	// domain := m.readQName()
+	// 	// m.reader.pos = old
+
+	// 	// record := newRecord(class(_class), Ptr, ttl, &len, WithAddr(ip), WithDomain(domain))
+	// 	// m.Records = append(m.Records, record)
+
+	// 	return
+	// }
 }
 
 type recordOption func(*Record)
@@ -177,19 +234,25 @@ func (m Msg) Print() {
 	if len(m.Records) < 1 {
 		return
 	}
-	println("; <<>> natedns (linux) <<>>" + m.Records[0].domain)
-	println(";; Got answer:")
-	println(";; ->>Header<<- opcode:", m.opcode.String(), "status:", m.reponseCode.String(), "id:", m.id)
-	println(";; flags:", m.queryReponse.String(), m.recursionDesired.String(), m.recursionAvaiable.String(), "; Query:", m.queryReponse.String())
-	println("Answer:", m.answers, "Authority:", m.nsRecs, "Additional:", m.addRecs)
-
-	println(";; Question Section:")
+	println(";<<>> natedns (linux) <<>>" + m.Records[0].domain)
+	println(";;Got answer:", "; id:", m.id)
+	println()
+	println(";;->>Header<<- opcode:", m.opcode.String(), "status:", m.reponseCode.String())
+	println(";;flags:", m.recursionDesired.String(), m.recursionAvaiable.String())
+	println(";Query:", m.queryReponse.String())
+	println()
+	println(";Questions:", m.questions)
+	println(";Answer:", m.answers)
+	println(";Authority:", m.nsRecs)
+	println(";Additional:", m.addRecs)
+	println()
+	println(";;Question Section:")
 	for _, r := range m.Records {
 		println(r.domain, r._type.String(), r._class.String(), r.addr.String())
 	}
-
-	println(";; Query Time:", m.took.String())
-	println(";; Server: 127.0.0.1 (UDP)")
+	println()
+	println(";;Query Time:", m.took.String())
+	println(";Server: 127.0.0.1 (UDP)")
 }
 func newRecord(_class class, _type qtype, ttl uint32, len *uint16, opts ...recordOption) Record {
 	record := Record{
@@ -220,47 +283,62 @@ func (m *Msg) parseQuestion() {
 	q := question{}
 	q.qname = m.readQName()
 	q.qtype = qtype(m.reader.read16())
-	q.qclass = m.reader.read16()
+	q.qclass = class(m.reader.read16())
 }
+
+var (
+	ErrorBufferTooShortForLabel = errors.New("read-qname: buffer too short for label len")
+	ErrorMaxJumpsReached        = errors.New("read-qname: max jumps reached")
+	ErrorLabelTooLong           = errors.New("read-qname: label has illegal length")
+	ErrorLabelHasEmpty          = errors.New("read-qname: label is empty")
+)
 
 // right now I do not support more than 1 RFC 1035 label
 func (m *Msg) readQName() string {
-	// this is the initial length
-
-	labelLen := uint8(m.reader.buff[m.reader.pos])
-
-	// 06 67 6f 6f 67 6c 65 03  63 6f 6d 00  |.google.com.|
-	// in this case the first byte is "6" which is "google"
-	// then after we've read 6, we get the byte "3" which is "com" and then NULL
-	// which means that we are done reading.
-	if labelLen > 63 {
-		panic(ErrorInvalidQNameLength)
-	}
-
 	if len(m.reader.buff) < 1 {
-		panic(ErrorInvalidQNameLength)
+		panic(ErrorBufferTooShortForLabel)
 	}
 
-	str := ""
+	jmps := 0
+	j := false
+	pos := m.reader.pos
+	str := "."
 	for {
-		if m.reader.buff[m.reader.pos] == 0 {
+		labelLen := uint8(m.reader.buff[pos])
+		if (labelLen & 0xc0) == 0xc0 {
+			if !j {
+				m.reader.advanceN(2)
+			}
+
+			pos = int(((uint16(labelLen) ^ 0xc0) << 8) | uint16(m.reader.buff[pos+1]))
+			// m.reader.window(4)
+
+			j = true
+			jmps++
+
+			continue
+		}
+		pos++
+
+		if jmps > 10 {
+			panic(ErrorMaxJumpsReached)
+		}
+
+		// if labelLen > 63 && jmps < 1 {
+		// 	panic(ErrorLabelTooLong)
+		// }
+
+		if m.reader.buff[pos] == 0 {
 			break
 		}
 
-		str += string(m.reader.buff[m.reader.pos])
-		if int(labelLen) == 0 {
-			str += string('.')
-			labelLen = uint8(m.reader.buff[m.reader.pos])
-			m.reader.pos++
-		}
-
-		labelLen--
-		m.reader.pos++
+		str += string(m.reader.buff[pos : pos+int(labelLen)])
+		str += string('.')
+		pos += int(labelLen)
 	}
 
-	if len(str) < 1 {
-		panic(ErrorInvalidQNameLength)
+	if !j {
+		m.reader.jumpTo(pos)
 	}
-
 	return str
 }
