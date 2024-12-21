@@ -3,8 +3,8 @@ package dns
 import "net"
 
 type Record struct {
-	_type  qtype
-	_class class
+	_type  QueryType
+	_class QueryClass
 	ttl    uint32
 	addr   net.IP
 	len    *uint16
@@ -25,7 +25,7 @@ func WithDomain(s string) recordOption {
 	}
 }
 
-func newRecord(_class class, _type qtype, ttl uint32, len *uint16, opts ...recordOption) Record {
+func newRecord(_class QueryClass, _type QueryType, ttl uint32, len *uint16, opts ...recordOption) Record {
 	record := Record{
 		_class: _class,
 		_type:  _type,

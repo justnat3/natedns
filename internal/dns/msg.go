@@ -17,10 +17,12 @@ var (
 type Msg struct {
 	took time.Duration
 	rw   *MsgRW
+
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
-	header
+	Header
+
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
-	question
+	Question
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
 
 	// FIXME: should probably do something different than hold potentially nil pointers
@@ -36,15 +38,15 @@ func NewMessage(b []byte) *Msg {
 	// TODO(nate): should be able to parse more messages
 	msg.parseQuestion()
 
-	for range msg.answers {
+	for range msg.Answerse {
 		msg.readDnsRecord()
 	}
 
-	for range msg.authorities {
+	for range msg.Authorities {
 		msg.readDnsRecord()
 	}
 
-	for range msg.additional {
+	for range msg.Additional {
 		msg.readDnsRecord()
 	}
 
@@ -54,8 +56,8 @@ func NewMessage(b []byte) *Msg {
 
 func (m Msg) Write() []byte {
 	bb := []byte{}
-	bb = append(bb, m.header.write()...)
-	bb = append(bb, m.question.write()...)
+	bb = append(bb, m.Header.write()...)
+	bb = append(bb, m.Question.write()...)
 	return bb
 }
 
@@ -79,14 +81,14 @@ func (m *Msg) readDnsRecord() {
 	}
 
 	_qtype := m.rw.read16()
-	switch qtype(_qtype) {
+	switch QueryType(_qtype) {
 	case A:
 		_class := m.rw.read16() // class
 		ttl := m.rw.read32()
 		len := m.rw.read16()
 
 		ip := m.rw.readAddr()
-		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithAddr(*ip), WithDomain(domain))
+		record := newRecord(QueryClass(_class), QueryType(_qtype), ttl, &len, WithAddr(*ip), WithDomain(domain))
 		m.Records = append(m.Records, record)
 
 	// EDNS feature
@@ -103,12 +105,12 @@ func (m *Msg) readDnsRecord() {
 
 	default:
 		_class := m.rw.read16() // class
-		println("type:", class(_class).String(), _class)
+		println("type:", QueryClass(_class).String(), _class)
 		ttl := m.rw.read32()
 		len := m.rw.read16()
 
 		m.rw.advanceN(int(len))
-		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithDomain(domain))
+		record := newRecord(QueryClass(_class), QueryType(_qtype), ttl, &len, WithDomain(domain))
 		m.Records = append(m.Records, record)
 	}
 	return
@@ -116,17 +118,17 @@ func (m *Msg) readDnsRecord() {
 
 func (m Msg) Print() {
 
-	println(";<<>> natedns (linux) <<>>" + m.question.domain)
-	println(";;Got answer:", "; id:", m.id)
+	println(";<<>> natedns (linux) <<>>" + m.Question.Domain)
+	println(";;Got answer:", "; id:", m.ID)
 	println()
-	println(";;->>Header<<- opcode:", m.opcode.String(), "status:", m.rcode.String())
-	println(";;flags:", m.rd.String(), m.ra.String())
-	println(";Query:", m.qr.String())
+	println(";;->>Header<<- opcode:", m.OpCode.String(), "status:", m.RCode.String())
+	println(";;flags:", m.RD.String(), m.RA.String())
+	println(";Query:", m.QR.String())
 	println()
-	println(";Questions:", m.questions)
-	println(";Answer:", m.answers)
-	println(";Authority:", m.authorities)
-	println(";Additional:", m.additional)
+	println(";Questions:", m.Questions)
+	println(";Answer:", m.Answerse)
+	println(";Authority:", m.Authorities)
+	println(";Additional:", m.Additional)
 	println()
 	println(";;Question Section:")
 	for _, r := range m.Records {
@@ -139,19 +141,19 @@ func (m Msg) Print() {
 
 // parseHeader provides a standard way to reading the msg header
 func (m *Msg) parseHeader() {
-	m.header.id = m.rw.read16()
-	m.header.parseHdrFlags(m.rw.read16())
-	m.header.questions = m.rw.read16()
-	m.header.answers = m.rw.read16()
-	m.header.authorities = m.rw.read16()
-	m.header.additional = m.rw.read16()
+	m.Header.ID = m.rw.read16()
+	m.Header.parseHdrFlags(m.rw.read16())
+	m.Header.Questions = m.rw.read16()
+	m.Header.Answerse = m.rw.read16()
+	m.Header.Authorities = m.rw.read16()
+	m.Header.Additional = m.rw.read16()
 }
 
 func (m *Msg) parseQuestion() {
-	q := question{}
-	q.domain = m.readLabelSet()
-	q._type = qtype(m.rw.read16())
-	q.class = class(m.rw.read16())
+	q := Question{}
+	q.Domain = m.readLabelSet()
+	q.Type = QueryType(m.rw.read16())
+	q.Class = QueryClass(m.rw.read16())
 }
 
 // right now I do not support more than 1 RFC 1035 label

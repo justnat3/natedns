@@ -37,9 +37,8 @@ func main() {
 	}
 	defer conn.Close()
 
-	question := dns.NewMessage(bb)
-	println("--GOT QUESTION--")
-	question.Print()
+	message := dns.NewMessage(bb)
+	message.Print()
 
 	raddr := &net.UDPAddr{Port: 53, IP: net.IP{8, 8, 8, 8}}
 
@@ -56,13 +55,11 @@ func main() {
 			panic(err)
 		}
 		if rrlen > 2 {
+			println("--READ FROM UDP---")
 			break
 		}
 	}
 
-	println()
-	println()
-	println("--RESPONSE FROM UPSTREAM NAMESERVER---")
-	in := dns.NewMessage(rbb)
-	in.Print()
+	m := dns.NewMessage(rbb)
+	m.Print()
 }

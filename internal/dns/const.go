@@ -215,40 +215,40 @@ func (a RecursionAvailable) String() string {
 	}
 }
 
-type qtype uint8
+type QueryType uint8
 
 const (
-	Unknown qtype = iota // ??
-	A                    // a host address
-	Ns                   // an authoritative name server
-	Md                   // a mail destination (Obsolete - use MX)
-	Mf                   // a mail forwarder (Obsolete - use MX)
-	Cname                // the canonical name for an alias
-	Soa                  // marks the start of a zone of authority
-	Mb                   // a mailbox domain name (EXPERIMENTAL)
-	Mg                   // a mail group member (EXPERIMENTAL)
-	Mr                   // a mail rename domain name (EXPERIMENTAL)
-	Null                 // a null RR (EXPERIMENTAL)
-	Wks                  // a well known service description
-	Ptr                  // a domain name pointer
-	Hinfo                // host information
-	Minfo                // mailbox or mail list information
-	Mx                   // mail exchange
-	Txt                  // text strings
-	Opt     qtype = 41   // optional?
+	Unknown QueryType = iota // ??
+	A                        // a host address
+	Ns                       // an authoritative name server
+	Md                       // a mail destination (Obsolete - use MX)
+	Mf                       // a mail forwarder (Obsolete - use MX)
+	Cname                    // the canonical name for an alias
+	Soa                      // marks the start of a zone of authority
+	Mb                       // a mailbox domain name (EXPERIMENTAL)
+	Mg                       // a mail group member (EXPERIMENTAL)
+	Mr                       // a mail rename domain name (EXPERIMENTAL)
+	Null                     // a null RR (EXPERIMENTAL)
+	Wks                      // a well known service description
+	Ptr                      // a domain name pointer
+	Hinfo                    // host information
+	Minfo                    // mailbox or mail list information
+	Mx                       // mail exchange
+	Txt                      // text strings
+	Opt     QueryType = 41   // optional?
 )
 
 // QTYPE fields appear in the question part of a query.  QTYPES are a
 // superset of TYPEs, hence all TYPEs are valid QTYPEs.  In addition, the
 // following QTYPEs are defined:
 const (
-	Axfr  qtype = iota + 251 // A request for a transfer of an entire zone
-	Mailb                    // A request for mailbox-related records (MB, MG or MR)
-	Maila                    // A request for mail agent RRs (Obsolete - see MX)
-	Star                     // A request for all records
+	Axfr  QueryType = iota + 251 // A request for a transfer of an entire zone
+	Mailb                        // A request for mailbox-related records (MB, MG or MR)
+	Maila                        // A request for mail agent RRs (Obsolete - see MX)
+	Star                         // A request for all records
 )
 
-func (qt qtype) String() string {
+func (qt QueryType) String() string {
 	switch qt {
 	case A:
 		return "A"
@@ -289,21 +289,21 @@ func (qt qtype) String() string {
 	}
 }
 
-type class int
+type QueryClass int
 
 const (
-	UnknownClass class = iota
-	In                 // the Internet
-	Cs                 // the CSNET class (Obsolete - used only for examples in some obsolete RFCs)
-	Ch                 // the CHAOS class
-	Hs                 // Hesiod [Dyer 87]
+	UnknownClass QueryClass = iota
+	In                      // the Internet
+	Cs                      // the CSNET class (Obsolete - used only for examples in some obsolete RFCs)
+	Ch                      // the CHAOS class
+	Hs                      // Hesiod [Dyer 87]
 	classStar
 )
 
-func (c class) String() string {
+func (c QueryClass) String() string {
 	switch c {
 	case UnknownClass:
-		return "Unknown"
+		return ""
 	case In:
 		return "IN"
 	case Cs:
