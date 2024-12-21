@@ -66,7 +66,11 @@ func (hdr header) write() []byte {
 	buff := []byte{
 		uint8(hdr.id >> 8),
 		uint8(hdr.id & 0xff),
-		(uint8(hdr.recursionDesired) | uint8(hdr.truncation)<<1 | uint8(hdr.authoritativeAnswer)<<2 | uint8(hdr.opcode)<<3 | uint8(hdr.recursionAvaiable)<<7),
+		(uint8(hdr.recursionDesired) |
+			uint8(hdr.truncation)<<1 |
+			uint8(hdr.authoritativeAnswer)<<2 |
+			uint8(hdr.opcode)<<3 |
+			uint8(hdr.recursionAvaiable)<<7),
 		uint8(hdr.reponseCode),
 		uint8(hdr.questions >> 8),
 		uint8(hdr.questions & 0xff),

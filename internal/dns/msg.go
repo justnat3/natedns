@@ -1,18 +1,22 @@
 package dns
 
 import (
-	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"net"
 	"time"
+)
+
+var (
+	ErrorBufferTooShortForLabel = errors.New("read-qname: buffer too short for label len")
+	ErrorMaxJumpsReached        = errors.New("read-qname: max jumps reached")
+	ErrorLabelTooLong           = errors.New("read-qname: label has illegal length")
+	ErrorLabelHasEmpty          = errors.New("read-qname: label is empty")
 )
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
 type Msg struct {
 	took   time.Duration
-	reader *msgRW
+	reader *MsgRW
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
 	header
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
@@ -21,106 +25,6 @@ type Msg struct {
 
 	// FIXME: should probably do something different than hold potentially nil pointers
 	Records []Record
-}
-
-type Record struct {
-	_type  qtype
-	_class class
-	ttl    uint32
-	addr   net.IP
-	len    *uint16
-	domain string
-}
-
-// msgRW defines a way to read the DNS Message as a buffer
-type msgRW struct {
-	pos     int    // position in the buffer
-	buff    []byte // buffer of the message in question
-	bufflen int    // len of the buffer read once
-}
-
-func (m *msgRW) current() uint8 {
-	return m.buff[m.pos]
-}
-
-func (m *msgRW) advance() {
-	m.pos++
-}
-
-func (m *msgRW) advanceN(amount int) {
-	if m.pos+amount > len(m.buff) {
-		panic("tried to read too far")
-	}
-	m.pos += amount
-}
-
-func (m *msgRW) window(w int, ahead bool) {
-	if m.pos+w > len(m.buff) {
-		println("UP_TO-window_of", m.pos, "@", hex.EncodeToString(m.buff[w-m.pos:m.pos]))
-		return
-	}
-
-	if m.pos-w < 0 {
-		println("DOWN_TO-window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos:m.pos]))
-		return
-	}
-
-	if ahead {
-		println("window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos:m.pos+w]))
-		return
-	}
-	println("window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos-w:m.pos+w]))
-}
-
-func (m *msgRW) jumpTo(pos int) {
-	if pos > len(m.buff) {
-		panic("oopsies jumped too far")
-	}
-
-	m.pos = pos
-}
-
-// newMsgReader returns a msgReader with the buff and len intialized
-func newMsgReader(b []byte) *msgRW {
-	return &msgRW{buff: b, bufflen: len(b)}
-}
-
-func (m *msgRW) write16(n uint16) {
-	binary.BigEndian.PutUint16(m.buff, n)
-	m.advanceN(2)
-}
-
-func (m *msgRW) write32(n uint32) {
-	binary.BigEndian.PutUint32(m.buff, n)
-	m.advanceN(4)
-}
-
-func (m *msgRW) write64(n uint64) {
-	binary.BigEndian.PutUint64(m.buff, n)
-	m.advanceN(8)
-}
-
-func (m *msgRW) clear() {
-	clear(m.buff)
-	m.pos = 0
-}
-
-func (m *msgRW) read16() uint16 {
-	out := binary.BigEndian.Uint16(m.buff[m.pos : m.pos+2])
-	m.advanceN(2)
-	return out
-}
-
-func (m *msgRW) read32() uint32 {
-	out := binary.BigEndian.Uint32(m.buff[m.pos : m.pos+4])
-	m.advanceN(4)
-	return out
-}
-
-func (m *msgRW) read64() uint64 {
-	out := binary.BigEndian.Uint64(m.buff[m.pos : m.pos+8])
-	m.advanceN(8)
-	return out
 }
 
 // NewMessage provides a standard way to reading the msg
@@ -154,40 +58,11 @@ func (m Msg) Write() []byte {
 	bb = append(bb, m.question.write()...)
 	return bb
 }
-
-func (m *Msg) readTo(len uint16) []byte {
-	buff := make([]byte, len)
-
-	_len := int(len) // where is size_t when you need it :\
-
-	if m.reader.pos+_len > m.reader.bufflen {
-		panic("dns-readto: the buffer is too short dumby")
-	}
-
-	for m.reader.pos >= m.reader.pos+_len {
-		buff = append(buff, m.reader.current())
-		m.reader.advance()
-	}
-
-	return buff
-}
-
 func printbin(i ...uint16) {
 	for _, i := range i {
 		print(fmt.Sprintf("%b ", i))
 	}
 	println()
-}
-
-func (m *Msg) readIPAddr() *net.IP {
-	addr := m.reader.read32()
-	ip := net.IPv4(
-		uint8((addr>>24)&0xff),
-		uint8((addr>>16)&0xff),
-		uint8((addr>>8)&0xff),
-		uint8((addr>>0)&0xff),
-	)
-	return &ip
 }
 
 // 0000   d5 7e 81 80 00 01 00 06 00 00 00 01 06 67 6f 6f   .~...........goo
@@ -213,11 +88,10 @@ func (m *Msg) parseDNSRecord() {
 	switch qtype(_qtype) {
 	case A:
 		_class := m.reader.read16() // class
-		println("type:", class(_class).String(), _class)
 		ttl := m.reader.read32()
 		len := m.reader.read16()
 
-		ip := m.readIPAddr()
+		ip := m.reader.readIPAddr()
 		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithAddr(*ip), WithDomain(domain))
 		m.Records = append(m.Records, record)
 
@@ -246,20 +120,6 @@ func (m *Msg) parseDNSRecord() {
 	return
 }
 
-type recordOption func(*Record)
-
-func WithAddr(ip net.IP) recordOption {
-	return func(r *Record) {
-		r.addr = ip
-	}
-}
-
-func WithDomain(s string) recordOption {
-	return func(r *Record) {
-		r.domain = s
-	}
-}
-
 func (m Msg) Print() {
 
 	println(";<<>> natedns (linux) <<>>" + m.question.qname)
@@ -282,20 +142,6 @@ func (m Msg) Print() {
 	println(";;Query Time:", m.took.String())
 	println(";Server: 127.0.0.1 (UDP)")
 }
-func newRecord(_class class, _type qtype, ttl uint32, len *uint16, opts ...recordOption) Record {
-	record := Record{
-		_class: _class,
-		_type:  _type,
-		ttl:    ttl,
-		len:    len,
-	}
-
-	for _, o := range opts {
-		o(&record)
-	}
-
-	return record
-}
 
 // parseHeader provides a standard way to reading the msg header
 func (m *Msg) parseHeader() {
@@ -313,13 +159,6 @@ func (m *Msg) parseQuestion() {
 	q.qtype = qtype(m.reader.read16())
 	q.qclass = class(m.reader.read16())
 }
-
-var (
-	ErrorBufferTooShortForLabel = errors.New("read-qname: buffer too short for label len")
-	ErrorMaxJumpsReached        = errors.New("read-qname: max jumps reached")
-	ErrorLabelTooLong           = errors.New("read-qname: label has illegal length")
-	ErrorLabelHasEmpty          = errors.New("read-qname: label is empty")
-)
 
 // right now I do not support more than 1 RFC 1035 label
 func (m *Msg) readQName() string {
