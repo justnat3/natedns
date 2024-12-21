@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -102,13 +103,21 @@ func (q question) String() string {
 	)
 }
 
-func DomainToLabel(domain string) []byte {
+var (
+	ErrorNoLabelToWrite = errors.New("domain-to-label: no label to write")
+)
+
+func DomainToLabel(domain string) ([]byte, error) {
+	if len(domain) < 1 {
+		return nil, ErrorNoLabelToWrite
+	}
+
 	var buf []byte
 	var labels []string
 
 	start := 0
 	for i, c := range domain {
-		if c != '.' {
+		if c != 0x2e {
 			continue
 		}
 
@@ -123,5 +132,5 @@ func DomainToLabel(domain string) []byte {
 	}
 
 	buf = append(buf, 0)
-	return buf
+	return buf, nil
 }
