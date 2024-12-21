@@ -2,7 +2,6 @@ package dns
 
 import (
 	"fmt"
-	"strings"
 )
 
 type header struct {
@@ -91,18 +90,6 @@ type question struct {
 }
 
 func (q question) write() []byte {
-
-	buff := []byte{}
-	qname := writeQName(q.qname)
-	buff = append(buff, qname...)
-	s := []byte{
-		uint8(q.qtype >> 8),
-		uint8(q.qtype & 0xff),
-		uint8(q.qclass >> 8),
-		uint8(q.qclass & 0xff),
-	}
-	buff = append(buff, s...)
-
 	return nil
 }
 
@@ -115,19 +102,26 @@ func (q question) String() string {
 	)
 }
 
-func writeQName(qname string) []byte {
-	s := strings.Split(qname, ".")
-	var b []byte
-	for _, label := range s {
-		l := len(label)
-		if l > 0x3f {
-			return nil
+func DomainToLabel(domain string) []byte {
+	var buf []byte
+	var labels []string
+
+	start := 0
+	for i, c := range domain {
+		if c != '.' {
+			continue
 		}
-		b = append(b, uint8(l))
-		for _, by := range label {
-			b = append(b, uint8(by))
-		}
+
+		labels = append(labels, domain[start:i])
+		start = i + 1
 	}
-	b = append(b, byte(0))
-	return b
+
+	labels = append(labels, domain[start:])
+	for _, label := range labels {
+		buf = append(buf, byte(len(label)))
+		buf = append(buf, []byte(label)...)
+	}
+
+	buf = append(buf, 0)
+	return buf
 }

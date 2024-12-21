@@ -15,6 +15,9 @@ func main() {
 		panic(err)
 	}
 	spew.Dump(h)
+	for _, h := range h {
+		spew.Dump(dns.DomainToLabel(h.FQDN))
+	}
 	os.Exit(0)
 
 	fmt.Println("Resolver Loaded...")

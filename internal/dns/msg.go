@@ -12,7 +12,7 @@ import (
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
 type Msg struct {
 	took   time.Duration
-	reader *msgReader
+	reader *msgRW
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
 	header
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
@@ -32,29 +32,29 @@ type Record struct {
 	domain string
 }
 
-// msgReader defines a way to read the DNS Message as a buffer
-type msgReader struct {
+// msgRW defines a way to read the DNS Message as a buffer
+type msgRW struct {
 	pos     int    // position in the buffer
 	buff    []byte // buffer of the message in question
 	bufflen int    // len of the buffer read once
 }
 
-func (m *msgReader) current() uint8 {
+func (m *msgRW) current() uint8 {
 	return m.buff[m.pos]
 }
 
-func (m *msgReader) advance() {
+func (m *msgRW) advance() {
 	m.pos++
 }
 
-func (m *msgReader) advanceN(amount int) {
+func (m *msgRW) advanceN(amount int) {
 	if m.pos+amount > len(m.buff) {
 		panic("tried to read too far")
 	}
 	m.pos += amount
 }
 
-func (m *msgReader) window(w int) {
+func (m *msgRW) window(w int) {
 	if m.pos+w > len(m.buff) {
 		println("UP_TO-window_of", m.pos, "@", hex.EncodeToString(m.buff[w-m.pos:m.pos]))
 		return
@@ -68,33 +68,52 @@ func (m *msgReader) window(w int) {
 	println("window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos-w:m.pos+w]))
 }
 
-func (m *msgReader) jumpTo(pos int) {
+func (m *msgRW) jumpTo(pos int) {
 	if pos > len(m.buff) {
 		panic("oopsies jumped too far")
 	}
 
 	m.pos = pos
-	// m.window(4)
 }
 
 // newMsgReader returns a msgReader with the buff and len intialized
-func newMsgReader(b []byte) *msgReader {
-	return &msgReader{buff: b, bufflen: len(b)}
+func newMsgReader(b []byte) *msgRW {
+	return &msgRW{buff: b, bufflen: len(b)}
 }
 
-func (m *msgReader) read16() uint16 {
+func (m *msgRW) write16(n uint16) {
+	binary.BigEndian.PutUint16(m.buff, n)
+	m.advanceN(2)
+}
+
+func (m *msgRW) write32(n uint32) {
+	binary.BigEndian.PutUint32(m.buff, n)
+	m.advanceN(4)
+}
+
+func (m *msgRW) write64(n uint64) {
+	binary.BigEndian.PutUint64(m.buff, n)
+	m.advanceN(8)
+}
+
+func (m *msgRW) clear() {
+	clear(m.buff)
+	m.pos = 0
+}
+
+func (m *msgRW) read16() uint16 {
 	out := binary.BigEndian.Uint16(m.buff[m.pos : m.pos+2])
 	m.advanceN(2)
 	return out
 }
 
-func (m *msgReader) read32() uint32 {
+func (m *msgRW) read32() uint32 {
 	out := binary.BigEndian.Uint32(m.buff[m.pos : m.pos+4])
 	m.advanceN(4)
 	return out
 }
 
-func (m *msgReader) read64() uint64 {
+func (m *msgRW) read64() uint64 {
 	out := binary.BigEndian.Uint64(m.buff[m.pos : m.pos+8])
 	m.advanceN(8)
 	return out
