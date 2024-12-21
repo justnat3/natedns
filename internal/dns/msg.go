@@ -122,7 +122,7 @@ func (m *Msg) parseDNSRecord() {
 
 func (m Msg) Print() {
 
-	println(";<<>> natedns (linux) <<>>" + m.question.qname)
+	println(";<<>> natedns (linux) <<>>" + m.question.domain)
 	println(";;Got answer:", "; id:", m.id)
 	println()
 	println(";;->>Header<<- opcode:", m.opcode.String(), "status:", m.rcode.String())
@@ -155,9 +155,9 @@ func (m *Msg) parseHeader() {
 
 func (m *Msg) parseQuestion() {
 	q := question{}
-	q.qname = m.readQName()
-	q.qtype = qtype(m.rw.read16())
-	q.qclass = class(m.rw.read16())
+	q.domain = m.readQName()
+	q._type = qtype(m.rw.read16())
+	q.class = class(m.rw.read16())
 }
 
 // right now I do not support more than 1 RFC 1035 label

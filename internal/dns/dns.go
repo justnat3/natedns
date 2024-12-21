@@ -87,11 +87,11 @@ func (hdr header) write() []byte {
 
 type question struct {
 	// question name could be like "google.com"
-	qname string
+	domain string
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
-	qtype qtype
+	_type qtype
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
-	qclass class
+	class class
 }
 
 func (q question) write() []byte {
@@ -101,9 +101,9 @@ func (q question) write() []byte {
 func (q question) String() string {
 	return fmt.Sprintf(
 		"question: %s\nqtype: %d\nqclass: %d",
-		string(q.qname),
-		q.qtype,
-		q.qclass,
+		string(q.domain),
+		q._type,
+		q.class,
 	)
 }
 
