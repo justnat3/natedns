@@ -9,20 +9,20 @@ type header struct {
 	id uint16 // message id
 
 	// fields
-	queryReponse        QR                 // query or response respectively
-	opcode              Opcode             // 0 std, 1 inverse, 2 server status, 3-15 reserved
-	authoritativeAnswer Authoritative      // authoritative
-	truncation          Truncation         // truncation
-	recursionDesired    RecursionDesired   // recursion desired
-	recursionAvaiable   RecursionAvailable // recursion available
-	reponseCode         ResponseCode       // response code, see rcodefailure
-	z                   uint8              // future use
+	qr         QR                 // query or response respectively
+	opcode     Opcode             // 0 std, 1 inverse, 2 server status, 3-15 reserved
+	authAnswer Authoritative      // authoritative
+	trunc      Truncation         // truncation
+	rd         RecursionDesired   // recursion desired
+	ra         RecursionAvailable // recursion available
+	rcode      ResponseCode       // response code, see rcodefailure
+	z          uint8              // future use
 
 	// counters
-	questions uint16 // how many questions
-	answers   uint16 // how many answers
-	nsRecs    uint16 // how many rr records in authority records
-	addRecs   uint16 // rr records in additional records
+	questions   uint16 // how many questions
+	answers     uint16 // how many answers
+	authorities uint16 // how many rr records in authority records
+	additional  uint16 // rr records in additional records
 }
 
 func (hdr header) String() string {
@@ -31,55 +31,55 @@ func (hdr header) String() string {
 	return fmt.Sprintf(
 		newline,
 		hdr.id,
-		hdr.queryReponse,
+		hdr.qr,
 		hdr.opcode,
-		hdr.authoritativeAnswer,
-		hdr.truncation,
-		hdr.recursionDesired,
-		hdr.recursionAvaiable,
+		hdr.authAnswer,
+		hdr.trunc,
+		hdr.rd,
+		hdr.ra,
 		hdr.z,
-		hdr.reponseCode,
+		hdr.rcode,
 		hdr.questions,
 		hdr.answers,
-		hdr.nsRecs,
-		hdr.addRecs,
+		hdr.authorities,
+		hdr.additional,
 	)
 }
 
 func (h *header) parseHdrFlags(qinfo uint16) {
 	lower := uint8(qinfo >> 8)
 	upper := uint8(qinfo & 0xff)
-	h.recursionDesired = RecursionDesired(lower & (1 << 0))
-	h.truncation = Truncation(lower & (1 << 1))
-	h.authoritativeAnswer = Authoritative(lower & (1 << 2))
+	h.rd = RecursionDesired(lower & (1 << 0))
+	h.trunc = Truncation(lower & (1 << 1))
+	h.authAnswer = Authoritative(lower & (1 << 2))
 	h.opcode = Opcode((lower >> 3) & 0x0f)
-	h.queryReponse = QR(0)
+	h.qr = QR(0)
 	if lower&(1<<7) > 0 {
-		h.queryReponse = QR(1)
+		h.qr = QR(1)
 	}
-	h.recursionAvaiable = RecursionAvailable((upper & (1 << 6)))
+	h.ra = RecursionAvailable((upper & (1 << 6)))
 	h.z = uint8((upper & (1 << 1)) & 0xf0)
-	h.reponseCode = ResponseCode(upper & 0x0f)
+	h.rcode = ResponseCode(upper & 0x0f)
 }
 
 func (hdr header) write() []byte {
 	buff := []byte{
 		uint8(hdr.id >> 8),
 		uint8(hdr.id & 0xff),
-		(uint8(hdr.recursionDesired) |
-			uint8(hdr.truncation)<<1 |
-			uint8(hdr.authoritativeAnswer)<<2 |
+		(uint8(hdr.rd) |
+			uint8(hdr.trunc)<<1 |
+			uint8(hdr.authAnswer)<<2 |
 			uint8(hdr.opcode)<<3 |
-			uint8(hdr.recursionAvaiable)<<7),
-		uint8(hdr.reponseCode),
+			uint8(hdr.ra)<<7),
+		uint8(hdr.rcode),
 		uint8(hdr.questions >> 8),
 		uint8(hdr.questions & 0xff),
 		uint8(hdr.answers >> 8),
 		uint8(hdr.answers & 0xff),
-		uint8(hdr.nsRecs >> 8),
-		uint8(hdr.nsRecs & 0xff),
-		uint8(hdr.addRecs >> 8),
-		uint8(hdr.addRecs & 0xff),
+		uint8(hdr.authorities >> 8),
+		uint8(hdr.authorities & 0xff),
+		uint8(hdr.additional >> 8),
+		uint8(hdr.additional & 0xff),
 	}
 
 	return buff

@@ -40,11 +40,11 @@ func NewMessage(b []byte) *Msg {
 		msg.parseDNSRecord()
 	}
 
-	for range msg.nsRecs {
+	for range msg.authorities {
 		msg.parseDNSRecord()
 	}
 
-	for range msg.addRecs {
+	for range msg.additional {
 		msg.parseDNSRecord()
 	}
 
@@ -125,14 +125,14 @@ func (m Msg) Print() {
 	println(";<<>> natedns (linux) <<>>" + m.question.qname)
 	println(";;Got answer:", "; id:", m.id)
 	println()
-	println(";;->>Header<<- opcode:", m.opcode.String(), "status:", m.reponseCode.String())
-	println(";;flags:", m.recursionDesired.String(), m.recursionAvaiable.String())
-	println(";Query:", m.queryReponse.String())
+	println(";;->>Header<<- opcode:", m.opcode.String(), "status:", m.rcode.String())
+	println(";;flags:", m.rd.String(), m.ra.String())
+	println(";Query:", m.qr.String())
 	println()
 	println(";Questions:", m.questions)
 	println(";Answer:", m.answers)
-	println(";Authority:", m.nsRecs)
-	println(";Additional:", m.addRecs)
+	println(";Authority:", m.authorities)
+	println(";Additional:", m.additional)
 	println()
 	println(";;Question Section:")
 	for _, r := range m.Records {
@@ -149,8 +149,8 @@ func (m *Msg) parseHeader() {
 	m.header.parseHdrFlags(m.rw.read16())
 	m.header.questions = m.rw.read16()
 	m.header.answers = m.rw.read16()
-	m.header.nsRecs = m.rw.read16()
-	m.header.addRecs = m.rw.read16()
+	m.header.authorities = m.rw.read16()
+	m.header.additional = m.rw.read16()
 }
 
 func (m *Msg) parseQuestion() {
