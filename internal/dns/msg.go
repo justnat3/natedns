@@ -15,8 +15,8 @@ var (
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
 type Msg struct {
-	took   time.Duration
-	reader *MsgRW
+	took time.Duration
+	rw   *MsgRW
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
 	header
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
@@ -30,7 +30,7 @@ type Msg struct {
 // NewMessage provides a standard way to reading the msg
 func NewMessage(b []byte) *Msg {
 	t := time.Now()
-	msg := &Msg{reader: newMsgReader(b)}
+	msg := &Msg{rw: newMsgReader(b)}
 	msg.parseHeader()
 
 	// TODO(nate): should be able to parse more messages
@@ -77,43 +77,43 @@ func printbin(i ...uint16) {
 
 func (m *Msg) parseDNSRecord() {
 	var domain string
-	if m.reader.current() == 0 {
+	if m.rw.current() == 0 {
 		domain = "<Root>"
-		m.reader.advance()
+		m.rw.advance()
 	} else {
 		domain = m.readQName()
 	}
 
-	_qtype := m.reader.read16()
+	_qtype := m.rw.read16()
 	switch qtype(_qtype) {
 	case A:
-		_class := m.reader.read16() // class
-		ttl := m.reader.read32()
-		len := m.reader.read16()
+		_class := m.rw.read16() // class
+		ttl := m.rw.read32()
+		len := m.rw.read16()
 
-		ip := m.reader.readIPAddr()
+		ip := m.rw.readIPAddr()
 		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithAddr(*ip), WithDomain(domain))
 		m.Records = append(m.Records, record)
 
 	// EDNS feature
 	case Opt:
 		// skip
-		m.reader.read16()
-		m.reader.read16()
-		m.reader.read16()
+		m.rw.read16()
+		m.rw.read16()
+		m.rw.read16()
 
-		len := m.reader.read16()
-		m.reader.advanceN(int(len))
+		len := m.rw.read16()
+		m.rw.advanceN(int(len))
 
 		m.Records = append(m.Records, newRecord(0, Opt, 0, &len))
 
 	default:
-		_class := m.reader.read16() // class
+		_class := m.rw.read16() // class
 		println("type:", class(_class).String(), _class)
-		ttl := m.reader.read32()
-		len := m.reader.read16()
+		ttl := m.rw.read32()
+		len := m.rw.read16()
 
-		m.reader.advanceN(int(len))
+		m.rw.advanceN(int(len))
 		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithDomain(domain))
 		m.Records = append(m.Records, record)
 	}
@@ -145,39 +145,39 @@ func (m Msg) Print() {
 
 // parseHeader provides a standard way to reading the msg header
 func (m *Msg) parseHeader() {
-	m.header.id = m.reader.read16()
-	m.header.parseHdrFlags(m.reader.read16())
-	m.header.questions = m.reader.read16()
-	m.header.answers = m.reader.read16()
-	m.header.nsRecs = m.reader.read16()
-	m.header.addRecs = m.reader.read16()
+	m.header.id = m.rw.read16()
+	m.header.parseHdrFlags(m.rw.read16())
+	m.header.questions = m.rw.read16()
+	m.header.answers = m.rw.read16()
+	m.header.nsRecs = m.rw.read16()
+	m.header.addRecs = m.rw.read16()
 }
 
 func (m *Msg) parseQuestion() {
 	q := question{}
 	q.qname = m.readQName()
-	q.qtype = qtype(m.reader.read16())
-	q.qclass = class(m.reader.read16())
+	q.qtype = qtype(m.rw.read16())
+	q.qclass = class(m.rw.read16())
 }
 
 // right now I do not support more than 1 RFC 1035 label
 func (m *Msg) readQName() string {
-	if len(m.reader.buff) < 1 {
+	if len(m.rw.buff) < 1 {
 		panic(ErrorBufferTooShortForLabel)
 	}
 
 	jmps := 0
 	j := false
-	pos := m.reader.pos
+	pos := m.rw.pos
 	str := "."
 	for {
-		labelLen := uint8(m.reader.buff[pos])
+		labelLen := uint8(m.rw.buff[pos])
 		if (labelLen & 0xc0) == 0xc0 {
 			if !j {
-				m.reader.advanceN(2)
+				m.rw.advanceN(2)
 			}
 
-			pos = int(((uint16(labelLen) ^ 0xc0) << 8) | uint16(m.reader.buff[pos+1]))
+			pos = int(((uint16(labelLen) ^ 0xc0) << 8) | uint16(m.rw.buff[pos+1]))
 			// m.reader.window(4)
 
 			j = true
@@ -195,17 +195,17 @@ func (m *Msg) readQName() string {
 		// 	panic(ErrorLabelTooLong)
 		// }
 
-		if m.reader.buff[pos] == 0 {
+		if m.rw.buff[pos] == 0 {
 			break
 		}
 
-		str += string(m.reader.buff[pos : pos+int(labelLen)])
+		str += string(m.rw.buff[pos : pos+int(labelLen)])
 		str += string('.')
 		pos += int(labelLen)
 	}
 
 	if !j {
-		m.reader.jumpTo(pos)
+		m.rw.jumpTo(pos)
 	}
 	return str
 }
