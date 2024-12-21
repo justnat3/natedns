@@ -235,6 +235,7 @@ const (
 	Minfo                // mailbox or mail list information
 	Mx                   // mail exchange
 	Txt                  // text strings
+	Opt     qtype = 41   // optional?
 )
 
 // QTYPE fields appear in the question part of a query.  QTYPES are a
@@ -281,6 +282,8 @@ func (qt qtype) String() string {
 		return "MX"
 	case Txt:
 		return "TXT"
+	case Opt:
+		return "OPT"
 	default:
 		return "UNKNOWN"
 	}
@@ -289,15 +292,18 @@ func (qt qtype) String() string {
 type class int
 
 const (
-	In class = iota + 1 // the Internet
-	Cs                  // the CSNET class (Obsolete - used only for examples in some obsolete RFCs)
-	Ch                  // the CHAOS class
-	Hs                  // Hesiod [Dyer 87]
+	UnknownClass class = iota
+	In                 // the Internet
+	Cs                 // the CSNET class (Obsolete - used only for examples in some obsolete RFCs)
+	Ch                 // the CHAOS class
+	Hs                 // Hesiod [Dyer 87]
 	classStar
 )
 
 func (c class) String() string {
 	switch c {
+	case UnknownClass:
+		return "Unknown"
 	case In:
 		return "IN"
 	case Cs:

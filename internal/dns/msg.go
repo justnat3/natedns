@@ -54,7 +54,7 @@ func (m *msgRW) advanceN(amount int) {
 	m.pos += amount
 }
 
-func (m *msgRW) window(w int) {
+func (m *msgRW) window(w int, ahead bool) {
 	if m.pos+w > len(m.buff) {
 		println("UP_TO-window_of", m.pos, "@", hex.EncodeToString(m.buff[w-m.pos:m.pos]))
 		return
@@ -65,6 +65,10 @@ func (m *msgRW) window(w int) {
 		return
 	}
 
+	if ahead {
+		println("window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos:m.pos+w]))
+		return
+	}
 	println("window_of", m.pos, "@", hex.EncodeToString(m.buff[m.pos-w:m.pos+w]))
 }
 
@@ -124,14 +128,23 @@ func NewMessage(b []byte) *Msg {
 	t := time.Now()
 	msg := &Msg{reader: newMsgReader(b)}
 	msg.parseHeader()
+
+	// TODO(nate): should be able to parse more messages
 	msg.parseQuestion()
 
 	for range msg.answers {
 		msg.parseDNSRecord()
 	}
 
+	for range msg.nsRecs {
+		msg.parseDNSRecord()
+	}
+
+	for range msg.addRecs {
+		msg.parseDNSRecord()
+	}
+
 	msg.took = time.Since(t)
-	msg.Print()
 	return msg
 }
 
@@ -188,17 +201,44 @@ func (m *Msg) readIPAddr() *net.IP {
 // 0080   00 00 00 00 00 00 00                              .......
 
 func (m *Msg) parseDNSRecord() {
-	domain := m.readQName()
+	var domain string
+	if m.reader.current() == 0 {
+		domain = "<Root>"
+		m.reader.advance()
+	} else {
+		domain = m.readQName()
+	}
+
 	_qtype := m.reader.read16()
-	_class := m.reader.read16() // class
-	ttl := m.reader.read32()
-	len := m.reader.read16()
 	switch qtype(_qtype) {
 	case A:
+		_class := m.reader.read16() // class
+		println("type:", class(_class).String(), _class)
+		ttl := m.reader.read32()
+		len := m.reader.read16()
+
 		ip := m.readIPAddr()
 		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithAddr(*ip), WithDomain(domain))
 		m.Records = append(m.Records, record)
+
+	// EDNS feature
+	case Opt:
+		// skip
+		m.reader.read16()
+		m.reader.read16()
+		m.reader.read16()
+
+		len := m.reader.read16()
+		m.reader.advanceN(int(len))
+
+		m.Records = append(m.Records, newRecord(0, Opt, 0, &len))
+
 	default:
+		_class := m.reader.read16() // class
+		println("type:", class(_class).String(), _class)
+		ttl := m.reader.read32()
+		len := m.reader.read16()
+
 		m.reader.advanceN(int(len))
 		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithDomain(domain))
 		m.Records = append(m.Records, record)
@@ -222,10 +262,7 @@ func WithDomain(s string) recordOption {
 
 func (m Msg) Print() {
 
-	if len(m.Records) < 1 {
-		return
-	}
-	println(";<<>> natedns (linux) <<>>" + m.Records[0].domain)
+	println(";<<>> natedns (linux) <<>>" + m.question.qname)
 	println(";;Got answer:", "; id:", m.id)
 	println()
 	println(";;->>Header<<- opcode:", m.opcode.String(), "status:", m.reponseCode.String())

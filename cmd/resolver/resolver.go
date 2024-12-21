@@ -3,22 +3,20 @@ package main
 import (
 	"fmt"
 	"net"
-	"os"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/justnat3/natedns/internal/dns"
 )
 
 func main() {
-	h, err := dns.ParseHosts("")
-	if err != nil {
-		panic(err)
-	}
-	spew.Dump(h)
-	for _, h := range h {
-		spew.Dump(dns.DomainToLabel(h.FQDN))
-	}
-	os.Exit(0)
+	// h, err := dns.ParseHosts("")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// spew.Dump(h)
+	// for _, h := range h {
+	// 	spew.Dump(dns.DomainToLabel(h.FQDN))
+	// }
+	// os.Exit(0)
 
 	fmt.Println("Resolver Loaded...")
 	addr := net.UDPAddr{Port: 2054, IP: net.IPv4zero}
@@ -39,8 +37,9 @@ func main() {
 	}
 	defer conn.Close()
 
-	message := dns.NewMessage(bb)
-	_ = message.Write()
+	question := dns.NewMessage(bb)
+	println("--GOT QUESTION--")
+	question.Print()
 
 	raddr := &net.UDPAddr{Port: 53, IP: net.IP{8, 8, 8, 8}}
 
@@ -57,10 +56,13 @@ func main() {
 			panic(err)
 		}
 		if rrlen > 2 {
-			println("--READ FROM UDP---")
 			break
 		}
 	}
 
-	_ = dns.NewMessage(rbb)
+	println()
+	println()
+	println("--RESPONSE FROM UPSTREAM NAMESERVER---")
+	in := dns.NewMessage(rbb)
+	in.Print()
 }
