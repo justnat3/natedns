@@ -24,11 +24,10 @@ type Msg struct {
 }
 
 type Record struct {
-	// NOTE(nate): this includes A records :)
 	_type  qtype
 	_class class
 	ttl    uint32
-	addr   *net.IP
+	addr   net.IP
 	len    *uint16
 	domain string
 }
@@ -159,7 +158,6 @@ func (m *Msg) readIPAddr() *net.IP {
 	return &ip
 }
 
-//		  0
 // 0000   d5 7e 81 80 00 01 00 06 00 00 00 01 06 67 6f 6f   .~...........goo
 // 0010   67 6c 65 03 63 6f 6d 00 00 01 00 01 c0 0c 00 01   gle.com.........
 // 0020   00 01 00 00 01 07 00 04 8e fa 71 8b c0 0c 00 01   ..........q.....
@@ -176,48 +174,22 @@ func (m *Msg) parseDNSRecord() {
 	_class := m.reader.read16() // class
 	ttl := m.reader.read32()
 	len := m.reader.read16()
-	println(";;", domain, qtype(_qtype).String(), class(_class).String(), ttl, len)
-	if len == 4 {
+	switch qtype(_qtype) {
+	case A:
 		ip := m.readIPAddr()
-		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithAddr(ip))
+		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithAddr(*ip), WithDomain(domain))
+		m.Records = append(m.Records, record)
+	default:
+		m.reader.advanceN(int(len))
+		record := newRecord(class(_class), qtype(_qtype), ttl, &len, WithDomain(domain))
 		m.Records = append(m.Records, record)
 	}
 	return
-
-	// switch qtype(_qtype) {
-	// case A:
-	// 	ip := m.readIPAddr()
-	// 	record := newRecord(class(_class), A, ttl, &len, WithAddr(ip))
-	// 	m.Records = append(m.Records, record)
-
-	// case Ptr:
-	// 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
-	// 	// offset := m.reader.read16()
-	// 	// ip := m.readIPAddr()
-
-	// 	// offset = offset & (1 << 2)
-	// 	// if offset < 1 {
-	// 	// 	return
-	// 	// }
-
-	// 	// old := m.reader.pos
-	// 	// m.reader.pos = int(offset)
-
-	// 	// _ = m.reader.read64()
-
-	// 	// domain := m.readQName()
-	// 	// m.reader.pos = old
-
-	// 	// record := newRecord(class(_class), Ptr, ttl, &len, WithAddr(ip), WithDomain(domain))
-	// 	// m.Records = append(m.Records, record)
-
-	// 	return
-	// }
 }
 
 type recordOption func(*Record)
 
-func WithAddr(ip *net.IP) recordOption {
+func WithAddr(ip net.IP) recordOption {
 	return func(r *Record) {
 		r.addr = ip
 	}

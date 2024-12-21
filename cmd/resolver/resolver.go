@@ -3,11 +3,20 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/justnat3/natedns/internal/dns"
 )
 
 func main() {
+	h, err := dns.ParseHosts("")
+	if err != nil {
+		panic(err)
+	}
+	spew.Dump(h)
+	os.Exit(0)
+
 	fmt.Println("Resolver Loaded...")
 	addr := net.UDPAddr{Port: 2054, IP: net.IPv4zero}
 	conn, err := net.ListenUDP("udp", &addr)
