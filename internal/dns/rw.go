@@ -17,7 +17,7 @@ type MsgRW struct {
 	bufflen int    // len of the buffer read once
 }
 
-func (rw *MsgRW) readIPAddr() *net.IP {
+func (rw *MsgRW) readAddr() *net.IP {
 	addr := rw.read32()
 	ip := net.IPv4(
 		uint8((addr>>24)&0xff),

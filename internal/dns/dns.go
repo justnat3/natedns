@@ -5,6 +5,10 @@ import (
 	"fmt"
 )
 
+var (
+	ErrorNoLabelToWrite = errors.New("domain-to-label: no label to write")
+)
+
 type header struct {
 	id uint16 // message id
 
@@ -106,10 +110,6 @@ func (q question) String() string {
 		q.class,
 	)
 }
-
-var (
-	ErrorNoLabelToWrite = errors.New("domain-to-label: no label to write")
-)
 
 func DomainToLabel(domain string) ([]byte, error) {
 	if len(domain) < 1 {
