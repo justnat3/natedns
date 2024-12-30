@@ -132,7 +132,7 @@ func (m Msg) Print() {
 	println()
 	println(";;Question Section:")
 	for _, r := range m.Records {
-		println(r.domain, r._type.String(), r._class.String(), r.addr.String())
+		println(r.Domain, r.Type.String(), r.Class.String(), r.Addr.String())
 	}
 	println()
 	println(";;Query Time:", m.took.String())

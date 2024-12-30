@@ -248,6 +248,47 @@ const (
 	Star                         // A request for all records
 )
 
+func TypeFromString(qt string) QueryType {
+	switch qt {
+	case "A":
+		return A
+	case "NS":
+		return Ns
+	case "MD":
+		return Md
+	case "MF":
+		return Mf
+	case "CNAME":
+		return Cname
+	case "SOA":
+		return Soa
+	case "MB":
+		return Mb
+	case "MG":
+		return Mg
+	case "MR":
+		return Mr
+	case "NULL":
+		return Null
+	case "WKS":
+		return Wks
+	case "PTR":
+		return Ptr
+	case "HINFO":
+		return Hinfo
+	case "MINFO":
+		return Minfo
+	case "MX":
+		return Mx
+	case "TXT":
+		return Txt
+	case "OPT":
+		return Opt
+	default:
+		return Unknown
+	}
+}
+
 func (qt QueryType) String() string {
 	switch qt {
 	case A:
@@ -318,4 +359,24 @@ func (c QueryClass) String() string {
 		println("INCORRECT_CLASS:", c)
 		return ""
 	}
+}
+
+func ClassFromString(c string) QueryClass {
+	switch c {
+	case "":
+		return UnknownClass
+	case "IN":
+		return In
+	case "CS":
+		return Cs
+	case "CH":
+		return Ch
+	case "HS":
+		return Hs
+	case "*":
+		return classStar
+	default:
+		return UnknownClass
+	}
+
 }
