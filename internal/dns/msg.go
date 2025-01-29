@@ -29,8 +29,8 @@ type Msg struct {
 	Records []Record
 }
 
-// NewMessage provides a standard way to reading the msg
-func NewMessage(b []byte) *Msg {
+// ParseMsg provides a standard way to reading the msg
+func ParseMsg(b []byte) *Msg {
 	t := time.Now()
 	msg := &Msg{rw: newMsgReader(b)}
 	msg.parseHeader()
@@ -38,7 +38,7 @@ func NewMessage(b []byte) *Msg {
 	// TODO(nate): should be able to parse more messages
 	msg.parseQuestion()
 
-	for range msg.Answerse {
+	for range msg.Answers {
 		msg.readDnsRecord()
 	}
 
@@ -54,10 +54,47 @@ func NewMessage(b []byte) *Msg {
 	return msg
 }
 
-func (m Msg) Write() []byte {
+// NewMessage returns a valid pointer to a new Msg
+// TODO(nate): for right now we only support one question
+// I dont support inverse queries, as they are purely optional
+func NewMessage(q Question) *Msg {
+	rw := MsgRW{buff: make([]byte, 0, 512)}
+	_ = Msg{rw: &rw, Question: q}
+	return nil
+}
+
+func (q Question) Bytes() []byte {
+	dbuff, err := DomainToLabel(q.Domain)
+	dbuff = dbuff[1:] // FIXME(nate): this is slow as shit
+
+	// FIXME(nate): do not panic
+	if err != nil {
+		panic(err)
+	}
+
+	var out []byte
+	out = append(out, dbuff...)
+	out = append(out, uint8(q.Type))
+	out = append(out, uint8(q.Class))
+
+	return out
+}
+
+func (qc QueryClass) Bytes() []byte {
+	var out []byte
+	out = append(out, uint8(qc>>8))
+	out = append(out, uint8(qc&0xff))
+	return out
+}
+
+func (m *Msg) AppendRecord(r Record) {
+	m.Records = append(m.Records, r)
+}
+
+func (m Msg) Bytes() []byte {
 	bb := []byte{}
-	bb = append(bb, m.Header.write()...)
-	bb = append(bb, m.Question.write()...)
+	bb = append(bb, m.Header.Bytes()...)
+	bb = append(bb, m.Question.Bytes()...)
 	return bb
 }
 
@@ -98,6 +135,8 @@ func (m *Msg) readDnsRecord() {
 		m.rw.read16()
 		m.rw.read16()
 
+		// mine e6 7c 00 01 00 01 00 00  00 00 00 00 00 0b 64 61
+		// real e6 7c 01 20 00 01 00 00  00 00 00 00 0b 64 61 74
 		len := m.rw.read16()
 		m.rw.advanceN(int(len))
 
@@ -122,11 +161,11 @@ func (m Msg) Print() {
 	println(";;Got answer:", "; id:", m.ID)
 	println()
 	println(";;->>Header<<- opcode:", m.OpCode.String(), "status:", m.RCode.String())
-	println(";;flags:", m.RD.String(), m.RA.String())
-	println(";Query:", m.QR.String())
+	println(";;flags:", m.RD, m.RA)
+	println(";Query:", m.QR)
 	println()
 	println(";Questions:", m.Questions)
-	println(";Answer:", m.Answerse)
+	println(";Answer:", m.Answers)
 	println(";Authority:", m.Authorities)
 	println(";Additional:", m.Additional)
 	println()
@@ -144,7 +183,7 @@ func (m *Msg) parseHeader() {
 	m.Header.ID = m.rw.read16()
 	m.Header.parseHdrFlags(m.rw.read16())
 	m.Header.Questions = m.rw.read16()
-	m.Header.Answerse = m.rw.read16()
+	m.Header.Answers = m.rw.read16()
 	m.Header.Authorities = m.rw.read16()
 	m.Header.Additional = m.rw.read16()
 }
@@ -152,8 +191,10 @@ func (m *Msg) parseHeader() {
 func (m *Msg) parseQuestion() {
 	q := Question{}
 	q.Domain = m.readLabelSet()
+	println("pos", m.rw.pos)
 	q.Type = QueryType(m.rw.read16())
 	q.Class = QueryClass(m.rw.read16())
+	m.Question = q
 }
 
 // right now I do not support more than 1 RFC 1035 label
@@ -203,6 +244,8 @@ func (m *Msg) readLabelSet() string {
 	if !j {
 		m.rw.jumpTo(pos)
 	}
+
+	println("str", str)
 	return str
 }
 

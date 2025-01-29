@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -24,6 +25,66 @@ type Resolver struct {
 	// this should prob be a chan
 	qList       ResolverCache
 	retransmits int
+}
+
+func main() {
+	// TODO(nate): printable manfiest of a root file
+	// cache := RCacheFromFile("./root.domain")
+	// println(len(cache.Names))
+	// spew.Dump(cache)
+
+	fmt.Println("Resolver Loaded...")
+	addr := net.UDPAddr{Port: 2054, IP: net.IPv4zero}
+	conn, err := net.ListenUDP("udp", &addr)
+	// FIXME(nate): this should not panic
+	if err != nil {
+		panic(err)
+	}
+
+	bb := make([]byte, 128)
+	for {
+		rlen, _, err := conn.ReadFromUDP(bb)
+		// FIXME(nate): this should not panic
+		if err != nil {
+			panic(err)
+		}
+		if rlen > 2 {
+			break
+		}
+	}
+	defer conn.Close()
+
+	message := dns.ParseMsg(bb)
+	message.Print()
+	parseMsg := message.Bytes()
+	spew.Dump(slices.Equal(parseMsg, bb))
+
+	spew.Dump("--MINE--", parseMsg, "--REAL--", bb)
+
+	raddr := &net.UDPAddr{Port: 53, IP: net.IP{8, 8, 8, 8}}
+
+	_, err = conn.WriteToUDP(parseMsg, raddr)
+	// FIXME(nate): this should not panic
+	if err != nil {
+		panic(err)
+	}
+
+	rbb := make([]byte, 512)
+
+	for {
+		rrlen, _, err := conn.ReadFromUDP(rbb)
+		// FIXME(nate): this should not panic
+		if err != nil {
+			panic(err)
+		}
+		if rrlen > 2 {
+			println("--READ FROM UDP---")
+			break
+		}
+	}
+
+	m := dns.ParseMsg(rbb)
+	m.Print()
 }
 
 func RCacheFromFile(p string) ResolverCache {
@@ -115,59 +176,4 @@ func RCacheFromFile(p string) ResolverCache {
 	}
 
 	return cache
-}
-
-func main() {
-	// TODO(nate): printable manfiest of a root file
-	rootRecords := RCacheFromFile("./root.domain")
-	spew.Dump(rootRecords)
-
-	fmt.Println("Resolver Loaded...")
-	addr := net.UDPAddr{Port: 2054, IP: net.IPv4zero}
-	conn, err := net.ListenUDP("udp", &addr)
-	// FIXME(nate): this should not panic
-	if err != nil {
-		panic(err)
-	}
-
-	bb := make([]byte, 512)
-	for {
-		rlen, _, err := conn.ReadFromUDP(bb)
-		// FIXME(nate): this should not panic
-		if err != nil {
-			panic(err)
-		}
-		if rlen > 2 {
-			break
-		}
-	}
-	defer conn.Close()
-
-	message := dns.NewMessage(bb)
-	message.Print()
-
-	raddr := &net.UDPAddr{Port: 53, IP: net.IP{8, 8, 8, 8}}
-
-	_, err = conn.WriteToUDP(bb, raddr)
-	// FIXME(nate): this should not panic
-	if err != nil {
-		panic(err)
-	}
-
-	rbb := make([]byte, 512)
-
-	for {
-		rrlen, _, err := conn.ReadFromUDP(rbb)
-		// FIXME(nate): this should not panic
-		if err != nil {
-			panic(err)
-		}
-		if rrlen > 2 {
-			println("--READ FROM UDP---")
-			break
-		}
-	}
-
-	m := dns.NewMessage(rbb)
-	m.Print()
 }

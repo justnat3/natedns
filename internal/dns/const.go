@@ -4,28 +4,10 @@ import (
 	"errors"
 )
 
-type QR uint8
-
-const (
-	Query QR = iota
-	Response
-)
-
 var (
 	ErrorInvalidHeader      = errors.New("header: invalid")
 	ErrorInvalidQNameLength = errors.New("qname: buffer is empty")
 )
-
-func (qr QR) String() string {
-	switch qr {
-	case Query:
-		return "Query"
-	case Response:
-		return "Response"
-	default:
-		return string(qr)
-	}
-}
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
 type Opcode uint8
@@ -56,60 +38,6 @@ func (o Opcode) String() string {
 		return "Update"
 	default:
 		return "Reserved"
-	}
-}
-
-type Authoritative uint8
-
-const (
-	AuthoritativeYes Authoritative = iota
-	AuthoritativeNo
-)
-
-func (a Authoritative) String() string {
-	switch a {
-	case AuthoritativeYes:
-		return "AUTHYES"
-	case AuthoritativeNo:
-		return "AUTHNO"
-	default:
-		panic("unknown authoritative response")
-	}
-}
-
-type Truncation uint8
-
-const (
-	TruncationYes Truncation = iota
-	TruncationNo
-)
-
-func (a Truncation) String() string {
-	switch a {
-	case TruncationYes:
-		return "TRUNCYES"
-	case TruncationNo:
-		return "TRUNCNO"
-	default:
-		panic("unknown truncation")
-	}
-}
-
-type RecursionDesired uint8
-
-const (
-	RecursionDesiredYes RecursionDesired = iota
-	RecursionDesiredNo
-)
-
-func (a RecursionDesired) String() string {
-	switch a {
-	case RecursionDesiredYes:
-		return ";rd"
-	case RecursionDesiredNo:
-		return ";rd-no"
-	default:
-		panic("unknown RD")
 	}
 }
 
@@ -194,24 +122,6 @@ func (rc ResponseCode) String() string {
 		return "BADTRUNC"
 	default:
 		panic("invalid response code")
-	}
-}
-
-type RecursionAvailable uint8
-
-const (
-	RecursionAvailableYes RecursionAvailable = iota
-	RecursionAvailableNo
-)
-
-func (a RecursionAvailable) String() string {
-	switch a {
-	case RecursionAvailableYes:
-		return ";ra"
-	case RecursionAvailableNo:
-		return ";ra-no"
-	default:
-		panic("unknown RD")
 	}
 }
 

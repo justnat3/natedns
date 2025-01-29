@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 )
@@ -13,18 +14,18 @@ type Header struct {
 	ID uint16 // message id
 
 	// fields
-	QR         QR                 // query or response respectively
-	OpCode     Opcode             // 0 std, 1 inverse, 2 server status, 3-15 reserved
-	AuthAnswer Authoritative      // authoritative
-	Trunc      Truncation         // truncation
-	RD         RecursionDesired   // recursion desired
-	RA         RecursionAvailable // recursion available
-	RCode      ResponseCode       // response code, see rcodefailure
-	z          uint8              // future use
+	QR         bool         // query or response respectively
+	OpCode     Opcode       // 0 std, 1 inverse, 2 server status, 3-15 reserved
+	AuthAnswer bool         // authoritative
+	Trunc      bool         // truncation
+	RD         bool         // recursion desired
+	RA         bool         // recursion available
+	RCode      ResponseCode // response code, see rcodefailure
+	z          bool         // future use
 
 	// counters
 	Questions   uint16 // how many questions
-	Answerse    uint16 // how many answers
+	Answers     uint16 // how many answers
 	Authorities uint16 // how many rr records in authority records
 	Additional  uint16 // rr records in additional records
 }
@@ -44,49 +45,68 @@ func (hdr Header) String() string {
 		hdr.z,
 		hdr.RCode,
 		hdr.Questions,
-		hdr.Answerse,
+		hdr.Answers,
 		hdr.Authorities,
 		hdr.Additional,
 	)
 }
 
-func (h *Header) parseHdrFlags(qinfo uint16) {
-	lower := uint8(qinfo >> 8)
-	upper := uint8(qinfo & 0xff)
-	h.RD = RecursionDesired(lower & (1 << 0))
-	h.Trunc = Truncation(lower & (1 << 1))
-	h.AuthAnswer = Authoritative(lower & (1 << 2))
-	h.OpCode = Opcode((lower >> 3) & 0x0f)
-	h.QR = QR(0)
-	if lower&(1<<7) > 0 {
-		h.QR = QR(1)
-	}
-	h.RA = RecursionAvailable((upper & (1 << 6)))
-	h.z = uint8((upper & (1 << 1)) & 0xf0)
-	h.RCode = ResponseCode(upper & 0x0f)
+func (h *Header) parseHdrFlags(qb uint16) {
+	h.QR = qb&_QR != 0
+	h.OpCode = Opcode((qb >> 11) & 0xF)
+	h.AuthAnswer = qb&_AA != 0
+	h.Trunc = qb&_TC != 0
+	h.RD = qb&_RD != 0
+	h.RA = qb&_RA != 0
+	h.z = qb&_Z != 0 // _Z covers the zero bit, which should be zero; not sure why we set it to the opposite.
+	h.RCode = ResponseCode(qb & 0xF)
 }
 
-func (hdr Header) write() []byte {
-	buff := []byte{
-		uint8(hdr.ID >> 8),
-		uint8(hdr.ID & 0xff),
-		(uint8(hdr.RD) |
-			uint8(hdr.Trunc)<<1 |
-			uint8(hdr.AuthAnswer)<<2 |
-			uint8(hdr.OpCode)<<3 |
-			uint8(hdr.RA)<<7),
-		uint8(hdr.RCode),
-		uint8(hdr.Questions >> 8),
-		uint8(hdr.Questions & 0xff),
-		uint8(hdr.Answerse >> 8),
-		uint8(hdr.Answerse & 0xff),
-		uint8(hdr.Authorities >> 8),
-		uint8(hdr.Authorities & 0xff),
-		uint8(hdr.Additional >> 8),
-		uint8(hdr.Additional & 0xff),
+const (
+	headerSize = 12
+
+	_QR = 1 << 15 // query/response (response=1)
+	_AA = 1 << 10 // authoritative
+	_TC = 1 << 9  // truncated
+	_RD = 1 << 8  // recursion desired
+	_RA = 1 << 7  // recursion available
+	_Z  = 1 << 6  // Z
+	_AD = 1 << 5  // authenticated data
+	_CD = 1 << 4  // checking disabled
+)
+
+func (hdr Header) Bytes() []byte {
+	var flags uint16
+
+	flags = uint16(hdr.OpCode)<<11 | uint16(hdr.RCode&0xF)
+	if hdr.QR {
+		flags |= _QR
 	}
 
-	return buff
+	if hdr.AuthAnswer {
+		flags |= _AA
+	}
+	if hdr.Trunc {
+		flags |= _TC
+	}
+	if hdr.RD {
+		flags |= _RD
+	}
+	if hdr.RA {
+		flags |= _RA
+	}
+	hdr.z = false
+
+	var b []byte
+
+	b = binary.BigEndian.AppendUint16(b, hdr.ID)
+	b = binary.BigEndian.AppendUint16(b, flags)
+	b = binary.BigEndian.AppendUint16(b, hdr.Questions)
+	b = binary.BigEndian.AppendUint16(b, hdr.Answers)
+	b = binary.BigEndian.AppendUint16(b, hdr.Authorities)
+	b = binary.BigEndian.AppendUint16(b, hdr.Additional)
+
+	return b
 }
 
 type Question struct {
@@ -115,6 +135,7 @@ func (q Question) String() string {
 
 func DomainToLabel(domain string) ([]byte, error) {
 	if len(domain) < 1 {
+
 		return nil, ErrorNoLabelToWrite
 	}
 
