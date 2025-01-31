@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -53,7 +54,7 @@ func (hdr Header) String() string {
 
 func (h *Header) parseHdrFlags(qb uint16) {
 	h.QR = qb&_QR != 0
-	h.OpCode = Opcode((qb >> 11) & 0xF)
+	h.OpCode = Opcode((qb >> 11) & 0xFF)
 	h.AuthAnswer = qb&_AA != 0
 	h.Trunc = qb&_TC != 0
 	h.RD = qb&_RD != 0
@@ -71,8 +72,6 @@ const (
 	_RD = 1 << 8  // recursion desired
 	_RA = 1 << 7  // recursion available
 	_Z  = 1 << 6  // Z
-	_AD = 1 << 5  // authenticated data
-	_CD = 1 << 4  // checking disabled
 )
 
 func (hdr Header) Bytes() []byte {
@@ -95,7 +94,6 @@ func (hdr Header) Bytes() []byte {
 	if hdr.RA {
 		flags |= _RA
 	}
-	hdr.z = false
 
 	var b []byte
 
@@ -140,22 +138,18 @@ func DomainToLabel(domain string) ([]byte, error) {
 	}
 
 	var buf []byte
-	var labels []string
+	labels := strings.Split(domain, ".")
 
-	start := 0
-	for i, c := range domain {
-		if c != 0x2e {
+	for _, l := range labels {
+		len := len(l)
+		if len == 0 {
 			continue
 		}
-
-		labels = append(labels, domain[start:i])
-		start = i + 1
-	}
-
-	labels = append(labels, domain[start:])
-	for _, label := range labels {
-		buf = append(buf, byte(len(label)))
-		buf = append(buf, []byte(label)...)
+		println("LABEL", len, l)
+		buf = append(buf, uint8(len))
+		for _, b := range []byte(l) {
+			buf = append(buf, b)
+		}
 	}
 
 	buf = append(buf, 0)

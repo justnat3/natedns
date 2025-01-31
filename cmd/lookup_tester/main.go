@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	_, err := exec.Command("dig", "-p", "2054", "google.com").Output()
+	_, err := exec.Command("dig", "-p", "2054", "datatracker.ietf.com", "+noedns").Output()
 	if err != nil {
 		panic(err)
 	}

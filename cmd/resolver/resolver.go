@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -57,9 +56,11 @@ func main() {
 	message := dns.ParseMsg(bb)
 	message.Print()
 	parseMsg := message.Bytes()
-	spew.Dump(slices.Equal(parseMsg, bb))
+	spew.Dump(parseMsg)
 
-	spew.Dump("--MINE--", parseMsg, "--REAL--", bb)
+	println("NEW------")
+	_message := dns.ParseMsg(bb)
+	_message.Print()
 
 	raddr := &net.UDPAddr{Port: 53, IP: net.IP{8, 8, 8, 8}}
 
@@ -83,6 +84,7 @@ func main() {
 		}
 	}
 
+	spew.Dump(rbb)
 	m := dns.ParseMsg(rbb)
 	m.Print()
 }

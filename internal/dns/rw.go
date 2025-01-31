@@ -3,6 +3,7 @@ package dns
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"net"
 )
 
@@ -113,6 +114,7 @@ func newMsgReader(b []byte) *MsgRW {
 
 func (m *MsgRW) read16() uint16 {
 	out := binary.BigEndian.Uint16(m.buff[m.pos : m.pos+2])
+	fmt.Printf("%16b\n", out)
 	m.advanceN(2)
 	return out
 }

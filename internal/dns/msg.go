@@ -23,8 +23,8 @@ type Msg struct {
 
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
 	Question
-	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
 
+	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
 	// FIXME: should probably do something different than hold potentially nil pointers
 	Records []Record
 }
@@ -65,7 +65,6 @@ func NewMessage(q Question) *Msg {
 
 func (q Question) Bytes() []byte {
 	dbuff, err := DomainToLabel(q.Domain)
-	dbuff = dbuff[1:] // FIXME(nate): this is slow as shit
 
 	// FIXME(nate): do not panic
 	if err != nil {
@@ -74,7 +73,9 @@ func (q Question) Bytes() []byte {
 
 	var out []byte
 	out = append(out, dbuff...)
+	out = append(out, uint8(0))
 	out = append(out, uint8(q.Type))
+	out = append(out, uint8(0))
 	out = append(out, uint8(q.Class))
 
 	return out
@@ -95,6 +96,8 @@ func (m Msg) Bytes() []byte {
 	bb := []byte{}
 	bb = append(bb, m.Header.Bytes()...)
 	bb = append(bb, m.Question.Bytes()...)
+	// j := make([]byte, 512-len(bb))
+	// bb = append(bb, j...)
 	return bb
 }
 
@@ -135,8 +138,6 @@ func (m *Msg) readDnsRecord() {
 		m.rw.read16()
 		m.rw.read16()
 
-		// mine e6 7c 00 01 00 01 00 00  00 00 00 00 00 0b 64 61
-		// real e6 7c 01 20 00 01 00 00  00 00 00 00 0b 64 61 74
 		len := m.rw.read16()
 		m.rw.advanceN(int(len))
 
