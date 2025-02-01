@@ -28,7 +28,7 @@ type Resolver struct {
 
 func main() {
 	// TODO(nate): printable manfiest of a root file
-	// cache := RCacheFromFile("./root.domain")
+	cache := RCacheFromFile("./root.domain")
 	// println(len(cache.Names))
 	// spew.Dump(cache)
 
@@ -54,17 +54,48 @@ func main() {
 	defer conn.Close()
 
 	message := dns.ParseMsg(bb)
-	message.Print()
+	println("QUESTION", message.Question.Domain)
+	message.Header.RD = false
 	parseMsg := message.Bytes()
-	spew.Dump(parseMsg)
 
-	println("NEW------")
-	_message := dns.ParseMsg(bb)
-	_message.Print()
+	serve := 0
 
-	raddr := &net.UDPAddr{Port: 53, IP: net.IP{8, 8, 8, 8}}
+	addr_ := cache.Names[cache.Nameservers[serve].Domain]
+	raddr := &net.UDPAddr{Port: 53, IP: addr_.Addr}
 
-	_, err = conn.WriteToUDP(parseMsg, raddr)
+	spew.Dump("using", raddr)
+	retmsg := NameServerSend(parseMsg, raddr, conn)
+	if retmsg.Header.RCode == dns.NXDomain {
+		println("NXDOMAIN does not exist")
+		return
+	}
+	for retmsg.Records[serve].Domain != message.Question.Domain {
+
+		retmsg.Print()
+		if retmsg.Header.RCode != dns.NoError {
+			spew.Dump(retmsg)
+			panic(retmsg.Header.RCode.String())
+		}
+
+		spew.Dump("using", raddr.IP)
+		retmsg = NameServerSend(parseMsg, raddr, conn)
+		for _, r := range retmsg.Records {
+			if r.Addr == nil {
+				continue
+			}
+			raddr = &net.UDPAddr{Port: 53, IP: r.Addr}
+		}
+	}
+
+	println("ANSWER")
+	spew.Dump(retmsg)
+
+	return
+
+}
+
+func NameServerSend(msg []byte, raddr *net.UDPAddr, conn *net.UDPConn) *dns.Msg {
+	_, err := conn.WriteToUDP(msg, raddr)
 	// FIXME(nate): this should not panic
 	if err != nil {
 		panic(err)
@@ -84,9 +115,7 @@ func main() {
 		}
 	}
 
-	spew.Dump(rbb)
-	m := dns.ParseMsg(rbb)
-	m.Print()
+	return dns.ParseMsg(rbb)
 }
 
 func RCacheFromFile(p string) ResolverCache {
@@ -151,7 +180,7 @@ func RCacheFromFile(p string) ResolverCache {
 			// Domain: tmp[0],
 			Class: dns.In,
 			Type:  dns.TypeFromString(tmp[2]),
-			TTL:   uint32(n),
+			TTL:   int32(n),
 		}
 
 		if rec.Type == dns.Unknown {

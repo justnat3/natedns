@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -114,15 +115,50 @@ func newMsgReader(b []byte) *MsgRW {
 
 func (m *MsgRW) read16() uint16 {
 	out := binary.BigEndian.Uint16(m.buff[m.pos : m.pos+2])
-	fmt.Printf("%16b\n", out)
 	m.advanceN(2)
 	return out
+}
+
+func (m *MsgRW) ViewWindow(start, end, target int) {
+	if start > len(m.buff) || end > len(m.buff) {
+		panic("requested read out of bounds")
+	}
+
+	println("\n--View--")
+	c := 0
+	for i := start; i < end; i++ {
+		if i == target && target != -1 {
+			fmt.Printf(">%X<\n", m.buff[i])
+			return
+		}
+
+		if c == 4 {
+			println()
+			c = 0
+		}
+
+		fmt.Printf("%2X ", m.buff[i])
+		c++
+	}
+	println()
+	println()
 }
 
 func (m *MsgRW) read32() uint32 {
 	out := binary.BigEndian.Uint32(m.buff[m.pos : m.pos+4])
 	m.advanceN(4)
 	return out
+}
+
+func (m *MsgRW) read32Signed() int32 {
+	reader := bytes.NewReader(m.buff[m.pos:])
+	var num int32
+	err := binary.Read(reader, binary.BigEndian, &num)
+	if err != nil {
+		fmt.Println("Error reading integer:", err)
+	}
+	m.advanceN(4)
+	return num
 }
 
 func (m *MsgRW) read64() uint64 {
